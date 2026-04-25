@@ -1,37 +1,48 @@
 spring:
+  application:
+    name: naengo-api-server
+
+  profiles:
+    active: local   # 기본 local, 배포 시 SPRING_PROFILES_ACTIVE=prod 로 교체
+
   autoconfigure:
     # EmbeddingModel 미설정 시 PgVectorStore 자동구성 비활성화 (AI 기능 추가 시 해제)
     exclude: org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
 
-  datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/naengo}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate        # 스키마는 직접 관리, 자동 변경 금지
+      # Flyway 가 스키마를 관리하므로 Hibernate 는 검증만 수행 (드리프트 조기 감지)
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
     show-sql: false
 
-  profiles:
-    active: local   # 기본값, 배포 시 prod로 교체
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
 
 jwt:
-  secret: ${JWT_SECRET:your-secret-key-must-be-at-least-32-characters-long!!}
   expiration: 86400000          # 24시간 (ms)
 
 oauth:
   kakao:
     user-info-url: https://kapi.kakao.com/v2/user/me
-    # 개발 테스트용 — 운영 배포 시 환경변수로 주입
-    rest-api-key: ${KAKAO_REST_API_KEY:}
     token-url: https://kauth.kakao.com/oauth/token
     auth-url: https://kauth.kakao.com/oauth/authorize
-    # 카카오 개발자 콘솔에 등록한 Redirect URI 와 동일해야 함
-    redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/oauth/kakao/test-callback}
   google:
     user-info-url: https://www.googleapis.com/oauth2/v3/userinfo
+
+# AWS S3 (이미지 업로드). 버킷/프리픽스가 비어있으면 업로드 엔드포인트는 503 반환.
+# 레시피 생성 API 의 `imageUrl` 프리픽스 검증도 이 값이 비어있으면 스킵 (로컬 개발용).
+# 실 구현은 SPEC-20260422-05 참조 - 팀원이 AWS 에 버킷 생성한 이후 진행.
+aws:
+  region: ${AWS_REGION:ap-northeast-2}
+  s3:
+    bucket: ${AWS_S3_BUCKET:}
+    public-url-prefix: ${AWS_S3_PUBLIC_URL_PREFIX:}
+    presigned-url-ttl-seconds: 300
+    max-content-length: 5242880
+    allowed-content-types: image/jpeg,image/png,image/webp

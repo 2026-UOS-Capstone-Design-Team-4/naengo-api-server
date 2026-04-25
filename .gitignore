@@ -36,5 +36,15 @@ out/
 ### VS Code ###
 .vscode/
 
-# yml 파일은 환경마다 다르게 관리되어야 하므로 git에서 제외
-src/main/resources/application-prod.yml src/main/resources/application-local.yml
+# 실제 secret 은 환경변수 또는 .env.local 로 로드한다 (.env* 는 무시).
+# application-local.yml / application-prod.yml 은 env 자리표시자만 포함하므로
+# 버전 관리한다 (팀 동기화 목적). 실 secret 은 절대 넣지 말 것.
+.env
+.env.*
+!.env.example
+
+# 로그
+*.log
+
+# macOS
+.DS_Store

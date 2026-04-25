@@ -24,16 +24,14 @@ public enum ErrorCode {
     // ─── Recipe ──────────────────────────────────────────
     RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 레시피입니다."),
     RECIPE_NOT_APPROVED(HttpStatus.FORBIDDEN, "승인되지 않은 레시피입니다."),
-    RECIPE_ALREADY_LIKED(HttpStatus.CONFLICT, "이미 좋아요한 레시피입니다."),
-    RECIPE_ALREADY_SCRAPPED(HttpStatus.CONFLICT, "이미 스크랩한 레시피입니다."),
-
-    // ─── Chat ────────────────────────────────────────────
-    CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 채팅방입니다."),
-    SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 세션입니다."),
 
     // ─── Common ──────────────────────────────────────────
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
+
+    // 정책: ErrorCode 는 "사용되는 시점에 추가" 한다. 미리 선언해두지 않는다.
+    //   - Like/Scrap (Step 3) 은 토글 설계이므로 ALREADY_* 에러가 필요 없다
+    //   - Chat (Step 5) 의 NOT_FOUND 류는 해당 도메인 구현 시 추가
 
     private final HttpStatus status;
     private final String message;

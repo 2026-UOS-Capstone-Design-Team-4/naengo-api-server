@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    # 호스트 포트 5434 는 docker-compose.yml 과 맞춤 (5432 충돌 회피).
+    # 다른 DB 가 이미 5434 에 있으면 DB_URL env 로 덮어쓰면 된다.
+    url: ${DB_URL:jdbc:postgresql://localhost:5434/naengo}
+    username: ${DB_USERNAME:naengo}
+    password: ${DB_PASSWORD:naengo}
+    driver-class-name: org.postgresql.Driver
+
+jwt:
+  # 로컬 개발 기본값. 반드시 32자 이상. 팀 공용 실 secret 은 환경변수로 주입.
+  secret: ${JWT_SECRET:local-dev-secret-key-must-be-at-least-32-characters-long!!}
+
+oauth:
+  kakao:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+    redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/oauth/kakao/test-callback}

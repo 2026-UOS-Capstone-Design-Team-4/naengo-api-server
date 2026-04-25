@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+jwt:
+  secret: ${JWT_SECRET}
+
+oauth:
+  kakao:
+    rest-api-key: ${KAKAO_REST_API_KEY}
+    redirect-uri: ${KAKAO_REDIRECT_URI}
