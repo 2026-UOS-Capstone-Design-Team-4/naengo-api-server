@@ -173,6 +173,7 @@ docs/
 | `./gradlew bootRun` 시 `FATAL: password authentication failed` | Docker 컨테이너가 아직 기동 중. `docker compose ps` 로 healthy 확인 |
 | `Validation failed for .../User` 등 Hibernate 오류 | 엔티티와 DB 스키마가 어긋남. `docker compose down -v && docker compose up -d` 로 리셋 후 재기동. 의도적 스키마 변경이면 새 `Vn__*.sql` 작성 |
 | `FlywayException: Detected applied migration not resolved locally` | 브랜치 전환 후 마이그레이션 파일이 누락됨. `docker compose down -v` 로 DB 초기화 |
+| `Schema validation: missing table [...]` + 로그에 Flyway 메시지가 **하나도 없음** | Spring Boot 4 에서 `flyway-core` 만으로는 오토컨피그가 안 걸림. `build.gradle` 에 `spring-boot-starter-flyway` 가 있는지 확인 |
 | `/health` 는 200 인데 다른 엔드포인트는 401 | 정상. JWT 없는 상태에서 보호 엔드포인트 접근 → 먼저 `/api/auth/login` |
 
 더 자세한 DB 문제 진단은 `docs/db-testing-guide.md`.
