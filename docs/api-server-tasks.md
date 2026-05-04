@@ -50,8 +50,9 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 | Like 도메인 | `domain/like/{entity,repository,service,controller,dto}/*` | **2026-05-03 신규 (Step 3)** — 토글 endpoint. 카운터는 DB 트리거 책임 |
 | Scrap 도메인 | `domain/scrap/{entity,repository,service,controller,dto}/*` | **2026-05-03 신규 (Step 3)** — 토글 + 본인 스크랩 목록. `RecipeListMapper` 재사용 |
 | Chat 도메인 | `domain/chat/{entity,repository,service,controller,dto}/*` | **2026-05-03 신규 (Step 5)** — read-only. AI 서버가 primary writer. 채팅방 목록 + 메시지 조회 |
+| Admin 도메인 | `domain/admin/{service,controller,dto}/*` | **2026-05-04 신규 (Step 6)** — pending_recipes 검토(목록/단건) + 승인(→recipes 이동)/반려 + 사용자 차단/해제 |
 | 보조 유틸 | `global/auth/SecurityUtil`, `domain/user/support/AuthorDisplayName` | OK |
-| 명세서 | `docs/spec/recipe-{create,read,delete}.md` (v1, 보존), **`docs/spec/recipe-{create,read,delete}-v2.md`** (2026-05-02 V4 통합 후 신규), `docs/spec/upload-presigned-url.md`, `docs/spec/ai-server-contract.md` (AI 서버 OpenAPI 0.1.0 스냅샷·갭분석), **`docs/spec/like-toggle.md`**, **`docs/spec/scrap-toggle.md`**, **`docs/spec/scrap-list.md`** (Step 3), **`docs/spec/user-me-{get,update}.md`**, **`docs/spec/user-password-change.md`**, **`docs/spec/user-withdraw.md`** (Step 4), **`docs/spec/chat-{room,message}-list.md`** (Step 5) | OK |
+| 명세서 | `docs/spec/recipe-{create,read,delete}.md` (v1, 보존), **`docs/spec/recipe-{create,read,delete}-v2.md`** (2026-05-02 V4 통합 후 신규), `docs/spec/upload-presigned-url.md`, `docs/spec/ai-server-contract.md` (AI 서버 OpenAPI 0.1.0 스냅샷·갭분석), **`docs/spec/like-toggle.md`**, **`docs/spec/scrap-toggle.md`**, **`docs/spec/scrap-list.md`** (Step 3), **`docs/spec/user-me-{get,update}.md`**, **`docs/spec/user-password-change.md`**, **`docs/spec/user-withdraw.md`** (Step 4), **`docs/spec/chat-{room,message}-list.md`** (Step 5), **`docs/spec/admin-pending-recipe-list.md`**, **`docs/spec/admin-recipe-review.md`**, **`docs/spec/admin-user-block.md`** (Step 6) | OK |
 | 로컬 개발 환경 | `docker-compose.yml` (pgvector/pg16) | OK |
 | 온보딩 / 가이드 | `README.md`, `docs/db-testing-guide.md` | OK |
 
@@ -62,7 +63,7 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 - ~~**Like / Scrap** (Step 3)~~ — **2026-05-03 완료**
 - ~~**User 마이페이지 / 탈퇴 익명화** (Step 4)~~ — **2026-05-03 완료** (선호도 `user_profiles` 는 후속 PR)
 - ~~**Chat (read-only)** (Step 5)~~ — **2026-05-03 완료** (5-2 채팅방 숨김 토글은 AI 서버 합의 후 별도 PR)
-- **Admin 도메인** (Step 6)
+- ~~**Admin 도메인** (Step 6)~~ — **2026-05-04 완료** (pending 검토 / 승인·반려 / 사용자 차단)
 - **AI 서버 연동 모듈** (Step 7)
 - **통합 테스트 / 운영 준비** (Step 8) — `DemoApplicationTests` 는 `com.example.demo` 패키지에 있어 현재 컨텍스트 로딩 불가, Step 8 에서 재배치·재작성
 
@@ -135,7 +136,7 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 - [x] 1.5-g. 엔티티·서비스·DTO 갱신 — 위 "코드 변경 요약" 참조
 - [x] 1.5-h. ~~`SPEC-20260422-02/03/04` v2 명세 발행~~ — **2026-05-02 완료**. `docs/spec/recipe-{create,read,delete}-v2.md` (`SPEC-20260502-02/03/04`)
 - [ ] 1.5-i. AI 서버 팀과 §5 보류 항목 합의 회의
-- [ ] 1.5-j. Step 6 (Admin 승인) 구현 시 `pending_recipes → recipes` 이동 트랜잭션 설계
+- [x] 1.5-j. ~~Step 6 (Admin 승인) 구현 시 `pending_recipes → recipes` 이동 트랜잭션 설계~~ — **2026-05-04 Step 6 에서 구현 완료** (`AdminRecipeService.approve` 트랜잭션, `PENDING_RECIPE_INCOMPLETE` 가드 포함)
 - [ ] 1.5-k. AI 서버가 우리 `recipes.embedding` 을 채우는 메커니즘 합의 (옵션 B 잠정)
 
 ---
@@ -246,15 +247,13 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
      · `recipe_ids` → 활성 `RecipeListItemResponse` 일괄 매핑 (N+1 방지). 비활성 레시피는 응답에서 제외
    - [x] **쓰기는 AI 서버가 담당** (Phase 0 합의 그대로)
 7. ~~**Fridge**~~ — **2026-05-02 폐기**. 도메인 자체 미실현. AI 서버가 채팅 컨텍스트로 재료를 직접 받아 처리하므로 별도 영속 저장 불필요.
-8. [ ] **Admin**
-   - 관리자 로그인 (User.role=ADMIN 으로 분기, 별도 로그인 화면은 프론트 책임)
-   - 레시피 승인/반려 (PENDING → APPROVED/REJECTED)
-   - 사용자 차단/차단 해제 (`User.block()` / `unblock()` 이미 있음)
-   - 레시피 승인 시 흐름 (Phase 0-3 확정):
-     1. 트랜잭션: `status = 'APPROVED'` UPDATE 후 커밋
-     2. 커밋 이후 AI 서버 `/internal/embed` 호출 → vector(1536) 반환
-     3. `UPDATE recipes SET embedding = ? WHERE recipe_id = ?`
-     4. 실패 시 승인은 유지, 재시도 큐 또는 스케줄러가 `status='APPROVED' AND embedding IS NULL` 를 주기 재처리
+8. [x] **Admin** — 2026-05-04 완료
+   - [x] 관리자 로그인 — `User.role=ADMIN` 권한 가드 (SecurityConfig 의 `hasRole("ADMIN")` 사용; 별도 로그인 화면은 프론트 책임)
+   - [x] 레시피 검토 — `GET /api/admin/pending-recipes` (status 필터, default PENDING), `GET .../{id}` 단건
+   - [x] 레시피 승인 — `POST /api/admin/pending-recipes/{id}/approve` → `recipes` INSERT (트리거가 `recipe_stats(0,0)` 생성) + `pending_recipes` status=APPROVED. **V4 통합 후 변경**: 구 plan 의 `recipes.status='APPROVED'` UPDATE 가 아니라 **테이블 간 이동**. 누락 필드 검증(`PENDING_RECIPE_INCOMPLETE`) 포함
+   - [x] 레시피 반려 — `POST .../{id}/reject` (사유 필수)
+   - [x] 사용자 차단/해제 — `POST /api/admin/users/{userId}/block` / `unblock`. 멱등 동작
+   - 레시피 승인 시 임베딩 호출은 **AI 서버 옵션 B 잠정 채택** 으로 본 PR 에서 미연동 (Phase 0-3 메모). 옵션 A 합의 시 Step 7 에서 추가
 9. [ ] **Upload (S3 presigned URL)**
    - `POST /api/uploads/presigned-url` → type(recipe/...) 을 받아 presigned PUT URL + 최종 접근 URL 반환
    - MIME 화이트리스트(jpeg/png/webp), 최대 크기, 유효 시간(5분)
@@ -382,7 +381,7 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 > | ~~2~~ | ~~Step 3 — Like / Scrap~~ | **2026-05-03 완료**. |
 > | ~~3~~ | ~~Step 4 — User 마이페이지 / 탈퇴~~ | **2026-05-03 완료** (선호도 후속 PR). |
 > | ~~4~~ | ~~Step 5 — Chat read-only~~ | **2026-05-03 완료**. 5-2 (채팅방 숨김 토글) 은 AI 서버 합의 후 별도 PR. |
-> | 5 | Step 6 — Admin (승인 흐름) | Step 7 의 임베딩 endpoint 가 명확해진 이후. |
+> | ~~5~~ | ~~Step 6 — Admin (승인 흐름)~~ | **2026-05-04 완료**. 임베딩 호출은 옵션 B 채택으로 미연동. |
 > | 6 | Step 7 본 구현 — AI 서버 클라이언트 | Step 1.5 와 "AI 서버 contract 검토 산출물" 완료 후. |
 > | 7 | Step 2-4b — Upload 실 구현 | AWS S3 버킷 준비 시점에. 변동 없음. |
 > | 마지막 | Step 8 — 운영 준비 / 통합 테스트 | 변동 없음. |
@@ -407,22 +406,33 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 
 ---
 
-### Step 1.5. V4 마이그레이션 — V1 보정본 (**즉시 착수, 2026-05-02 신설**)
+### Step 1.5. V4 통합 — **완료 (2026-05-03)**
 의존: Step 1 완료. **이후 모든 Step 의 전제**.
 
-상세 결정·후보 항목은 §1.5 참조. 요약:
+> **2026-05-04 점검 결과**: 본 §6 Step 1.5 의 옛 [ ] 체크박스가 §1.5 의 실제 진행 상황 (전부 [x]) 과 일관되지 않아 정정. 결정·갭분석·실 작업 모두 끝남. 현 status:
 
-- [ ] 1.5-1. AI 서버 OpenAPI 정독 ([`docs/api-1.json`](api-1.json) = 로컬 스냅샷, 원본은 <http://43.201.62.254:8000/docs>) → `recipes` / `chat_rooms` / `chat_messages` / `users` 와의 컬럼·타입·참조 정합 점검
-- [ ] 1.5-2. 점검 결과를 `docs/spec/ai-server-contract.md` (신규, 임시) 에 표 형태로 캡처 — endpoint 목록 + 우리 DB 와 닿는 모델만
-- [ ] 1.5-3. 정합되지 않는 항목을 `V4__correct_initial_schema.sql` 로 작성 (또는 더 좁은 이름으로 분할)
-  - 알려진 첫 항목: `session_logs.selected_recipe_id` 에 `ON DELETE SET NULL` 부여 (`docs/spec/recipe-delete.md §4-5` 메모)
-  - 추가 항목은 1.5-1 결과로 결정
-- [ ] 1.5-4. `docker compose down -v && docker compose up -d && ./gradlew bootRun` 으로 V1→V2→V3→V4 자동 적용 검증
-- [ ] 1.5-5. Hibernate `validate` 통과 확인 (엔티티 변경이 동반됐다면 함께 PR)
-- [ ] 1.5-6. `docs/db-testing-guide.md` Flyway 기대값 표 4행으로 갱신 + V4 가 만지는 컬럼/제약 검증 항목 추가
-- [ ] 1.5-7. `README.md` 의 "V1~V3" 문구 갱신, 본 문서 §1 인벤토리 갱신
+- [x] 1.5-1. AI 서버 OpenAPI 정독 — 갭분석 산출 [`docs/spec/ai-server-contract.md`](spec/ai-server-contract.md) 발행
+- [x] 1.5-2. 점검 결과 spec 화 — 위 contract spec 의 §3 / §4 표가 정합 매핑
+- [x] 1.5-3. V4 작성 → 통합 이슈 12건 발견 → 사용자 지시로 **옵션 (b) 변형** 채택: V1 폐기 + 구 V4 가 V1 자리 흡수. V2/V3 보존. 자세한 결정 / 변경 내용은 [`docs/changes/V4-integration-resolved.md`](changes/V4-integration-resolved.md)
+  - 알려졌던 항목 (`session_logs.selected_recipe_id ON DELETE SET NULL`) 은 V4 통합 시 `session_logs` 테이블 자체가 폐기되어 자동 해소됨 (per-message `chat_messages` 모델로 전환)
+- [x] 1.5-4. `docker compose down -v && docker compose up -d && ./gradlew bootRun` 으로 V1→V2→V3 자동 적용 검증 — Flyway 3행 모두 success
+- [x] 1.5-5. Hibernate `validate` 통과 확인 — 엔티티 (User / Recipe / RecipeStats / PendingRecipe / Ingredient + RecipeAuthorType enum) 동시 갱신
+- [x] 1.5-6. `docs/db-testing-guide.md` Flyway 기대값 표 갱신 (V1~V3) + V4 신설 테이블·트리거 검증 항목 추가
+- [x] 1.5-7. `README.md` 의 "V1~V3" 문구 갱신, 본 문서 §1 인벤토리 갱신
+- [x] 1.5-8. SPEC 후속 발행 — `recipe-create-v2`, `recipe-read-v2`, `recipe-delete-v2` (`SPEC-20260502-02/03/04`)
 
-**산출물**: `db/migration/V4__*.sql`, `docs/spec/ai-server-contract.md`, 갱신된 `db-testing-guide.md` / `README.md` / 본 문서
+**산출물 (실제)**:
+- `db/migration/V1__init.sql` (= 구 V4 흡수, BIGSERIAL/`fridge` 폐기/`is_active`/triggers 등)
+- `docs/spec/ai-server-contract.md`, `docs/spec/recipe-{create,read,delete}-v2.md`
+- `docs/changes/V4-integration-issues.md`, `docs/changes/V4-integration-resolved.md`
+- 갱신된 `db-testing-guide.md` / `README.md` / 본 문서
+- 엔티티·DTO·서비스·컨트롤러 V4 정합 (Recipe / PendingRecipe / RecipeAuthorType / Ingredient 5필드 / User.is_active 등)
+
+**§1.5 와의 일관성**:
+§1.5 의 1.5-a~h 와 본 §6 의 1.5-1~8 은 동일 작업의 두 시각. 잔여(미완) 후속은 다음 항목들로 §1.5 에 등록 (Step 6/7 / AI 팀 합의 영역):
+- [ ] 1.5-i. AI 서버 팀과 §5 보류 항목 합의 회의
+- [x] 1.5-j. ~~Step 6 (Admin 승인) 구현 시 `pending_recipes → recipes` 이동 트랜잭션 설계~~ — **2026-05-04 Step 6 에서 구현 완료** (`AdminRecipeService.approve` 트랜잭션)
+- [ ] 1.5-k. AI 서버가 우리 `recipes.embedding` 을 채우는 메커니즘 합의 (옵션 B 잠정)
 
 ---
 
@@ -541,14 +551,39 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 
 ---
 
-### Step 6. Admin
-의존: Step 2 완료 (승인 대상 Recipe 존재).
+### Step 6. Admin — **완료 (2026-05-04)**
+의존: Step 2 완료, Step 1.5 (V4 통합).
 
-- [ ] 6-1. 명세서 `docs/spec/admin-recipe-approve.md` → 승인/반려 엔드포인트. 승인 시 AI 서버 임베딩 호출은 **Step 7 완료 후** 연동 (우선 DB 상태만 변경해도 OK — 임베딩은 NULL 인 채로 남음)
-- [ ] 6-2. 명세서 `docs/spec/admin-user-block.md` → 차단/해제
-- [ ] 6-3. 관리자 권한 가드 (`ADMIN` 역할 필수 어노테이션 또는 시큐리티 설정)
+- [x] 6-1. 명세서 + 구현 — pending 검토 / 승인 / 반려:
+  - `docs/spec/admin-pending-recipe-list.md` (`SPEC-20260504-01`) — 목록 / 단건 (status 필터, ADMIN 검토용)
+  - `docs/spec/admin-recipe-review.md` (`SPEC-20260504-02`) — 승인 / 반려
+  - 승인 흐름 (V4 통합 후 갱신): `pending_recipes (PENDING)` → 검증(`PENDING_RECIPE_INCOMPLETE`) → `recipes` INSERT (`is_active=true`, `author_type='USER'`) + 트리거가 `recipe_stats(0,0)` 자동 생성 → `pending_recipes` UPDATE (`status='APPROVED'`, `admin_note`, `reviewed_at`). pending row 보존 (사용자가 `/my` 에서 결과 확인)
+  - AI 서버 임베딩 호출은 옵션 B (AI 자체 cron) 잠정 채택으로 **미연동**. 옵션 A 변경 시 Step 7 에서 추가
+- [x] 6-2. `docs/spec/admin-user-block.md` (`SPEC-20260504-03`) → 차단 / 해제. 멱등 동작. 탈퇴 사용자(`ALREADY_WITHDRAWN`) 방어
+- [x] 6-3. 관리자 권한 가드 — SecurityConfig 기존 `.requestMatchers("/api/admin/**").hasRole("ADMIN")` 활용. 추가 코드 불필요
 
-**산출물**: 명세서 2건, `domain/admin/*`
+**산출물 (실제)**:
+- 명세서 3건 (`admin-pending-recipe-list`, `admin-recipe-review`, `admin-user-block`)
+- `domain/admin/{service,controller,dto}/*` (DTO 8개, Service 2개, Controller 2개)
+- `domain/recipe/repository/PendingRecipeRepository.findByStatusOrderByLatest` 추가
+- `PendingRecipe` 엔티티에 `markApproved(adminNote)` / `markRejected(reason)` 메서드 추가
+- `ErrorCode.PENDING_RECIPE_NOT_REVIEWABLE` (409), `PENDING_RECIPE_INCOMPLETE` (422) 추가
+
+**검증**:
+- 빌드 PASS, docker + bootRun OK
+- 스모크 테스트 (alice=USER + admin=ADMIN, alice 가 미완성/완성 pending 1건씩 제출):
+  · USER 토큰으로 admin endpoint → 403 ✓
+  · ADMIN: PENDING 목록 → 2건 ✓
+  · 미완성 승인 → 422 PENDING_RECIPE_INCOMPLETE ✓
+  · 완성 승인 → 200, recipeId 반환, recipes 에 row 생성 ✓
+  · 같은 pending 재승인 → 409 PENDING_RECIPE_NOT_REVIEWABLE ✓
+  · 반려 사유 누락 → 400 ✓
+  · 반려 정상 → 200, status=REJECTED + admin_note ✓
+  · 승인 후 `/api/recipes` 공개 목록에 등장 ✓
+  · 승인 후 alice `/my` 에 status=APPROVED + REJECTED 둘 다 노출 ✓
+  · 사용자 차단 → 200, alice 의 다음 endpoint 호출에서 403 ✓
+  · 차단 해제 → 200 ✓
+  · 없는 사용자 차단 → 404 USER_NOT_FOUND ✓
 
 ---
 

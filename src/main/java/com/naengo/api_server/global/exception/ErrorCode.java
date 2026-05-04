@@ -26,6 +26,8 @@ public enum ErrorCode {
     // ─── Recipe ──────────────────────────────────────────
     RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 레시피입니다."),
     PENDING_RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 제출 레시피입니다."),
+    PENDING_RECIPE_NOT_REVIEWABLE(HttpStatus.CONFLICT, "이미 승인 또는 반려된 레시피입니다."),
+    PENDING_RECIPE_INCOMPLETE(HttpStatus.UNPROCESSABLE_ENTITY, "승인에 필요한 필수 필드가 누락되어 있습니다."),
 
     // ─── Chat ────────────────────────────────────────────
     CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 채팅방입니다."),

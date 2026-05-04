@@ -106,4 +106,16 @@ public class PendingRecipe {
     public void cancel() {
         this.isActive = false;
     }
+
+    public void markApproved(String adminNote) {
+        this.status = RecipeStatus.APPROVED;
+        this.adminNote = adminNote;
+        this.reviewedAt = ZonedDateTime.now();
+    }
+
+    public void markRejected(String reason) {
+        this.status = RecipeStatus.REJECTED;
+        this.adminNote = reason;
+        this.reviewedAt = ZonedDateTime.now();
+    }
 }
