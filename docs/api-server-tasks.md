@@ -44,6 +44,7 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 | User 도메인 | `domain/user/{entity,dto,repository,service,controller}/*` | OK (signup / login / social) + **2026-05-03 Step 4 완료**: 마이페이지 조회/수정, 비밀번호 변경, 회원 탈퇴 익명화 (`UserMeService` / `UserMeController`). **2026-05-04 후속**: `UserProfile` 엔티티 + 선호도 endpoint (`GET/PUT /api/users/me/profile`) |
 | Auth 가드 | `global/auth/{JwtAuthenticationEntryPoint, JwtAccessDeniedHandler}.java` | **2026-05-04 신규** — 미인증 → 401 + ApiResponse, 미인가 → 403 + ApiResponse 일관 응답 |
 | Auth 쿠키 | `global/auth/AuthCookieFactory.java` + `JwtAuthenticationFilter` 쿠키 fallback + `AuthController.logout` | **2026-05-07 신규 (`SPEC-20260507-01`)** — JWT 를 HttpOnly Cookie 로 발급/만료. Authorization 헤더 + 쿠키 양쪽 지원 (헤더 우선). `auth.cookie.*` env 분리 (local: secure=false, prod=true) |
+| 통합 테스트 | `src/test/java/com/naengo/api_server/integration/{IntegrationTestSupport, AuthCookieIntegrationTest, RecipeFlowIntegrationTest}.java` | **2026-05-07 신규 (Step 8-4)** — Testcontainers Postgres+pgvector + Spring Boot 4 `@SpringBootTest` + RestClient. 11건 PASS |
 | 헬스체크 | `global/controller/HealthController.java` | OK (`GET /health`) |
 | 설정 파일 | `application.yml` / `application-{local,prod}.yml` | OK (프로파일 분리, secret env 외부화, `aws.s3.*` 키 준비) |
 | 마이그레이션 | `db/migration/V1__init.sql` (= 구 V4 가 V1 자리로 이동, fixes 적용), `V2__add_social_login_fields.sql`, `V3__add_user_deleted_at.sql` | **2026-05-02 V1 ↔ V4 통합 완료**. 구 `V1__init.sql` 폐기 + 구 `V4__fixed_schema.sql` 폐기. 새 V1 이 구 V4 의 설계를 흡수 (BIGSERIAL, V2 와 충돌하던 unique 제약 제거 등). V2/V3 는 그대로 ALTER 로 누적. **`fridge` 테이블 폐기** (사용자 결정 2026-05-02). |
@@ -67,7 +68,7 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 - ~~**Chat (read-only)** (Step 5)~~ — **2026-05-03 완료** (5-2 채팅방 숨김 토글은 AI 서버 합의 후 별도 PR)
 - ~~**Admin 도메인** (Step 6)~~ — **2026-05-04 완료** (pending 검토 / 승인·반려 / 사용자 차단)
 - **AI 서버 연동 모듈** (Step 7)
-- **통합 테스트 / 운영 준비** (Step 8) — `DemoApplicationTests` 는 `com.example.demo` 패키지에 있어 현재 컨텍스트 로딩 불가, Step 8 에서 재배치·재작성
+- **통합 테스트 / 운영 준비** (Step 8) — **2026-05-07 통합 테스트 부분 완료** (Testcontainers + 11개 테스트 통과). CORS / 로깅 / 배포는 미완
 
 ---
 
@@ -614,16 +615,22 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 
 ---
 
-### Step 8. 운영 준비 (배포 직전)
+### Step 8. 운영 준비 (배포 직전) — **부분 완료 (8-4 통합 테스트 2026-05-07 완료)**
 의존: Step 1~7 완료.
 
 - [ ] 8-1. CORS 설정 (프론트 도메인 화이트리스트)
-- [ ] 8-2. 운영 secret 외부화 (JWT secret, DB 접속정보, AWS 키, 내부 토큰)
+- [ ] 8-2. 운영 secret 외부화 (JWT secret, DB 접속정보, AWS 키, 내부 토큰) — `application-prod.yml` 에 env 자리표시자 일부 준비됨
 - [ ] 8-3. 로깅 정책 정리 (요청 ID, 사용자 ID 마스킹, PII 로그 금지)
-- [ ] 8-4. 통합 테스트: 로그인 → 레시피 작성 → 관리자 승인 → 임베딩 생성 → 스크랩 → 탈퇴, 이 end-to-end 1개
+- [x] 8-4. **통합 테스트** — 2026-05-07 완료
+  - 인프라: Testcontainers (`pgvector/pgvector:pg16` singleton, JVM 단위 공유) + Spring Boot 4 `@SpringBootTest(RANDOM_PORT)` + Spring 6 `RestClient`
+  - 베이스: `IntegrationTestSupport` — Postgres testcontainer + Flyway 자동 적용 + 각 테스트 후 9개 테이블 TRUNCATE 격리
+  - `AuthCookieIntegrationTest` (8건) — `SPEC-20260507-01` 검증: signup/login Set-Cookie + 헤더/쿠키/둘다/없음 분기 + logout / withdraw 만료
+  - `RecipeFlowIntegrationTest` (3건) — E2E: alice signup → recipe submit → admin approve (recipe_stats 트리거 검증) → bob like/scrap (counter 트리거) → /scraps/my → /recipes/my APPROVED 갱신 → alice 탈퇴 → 닉네임 치환 + bob counter 보존. + 422 PENDING_RECIPE_INCOMPLETE / 403 admin guard
+  - 폐기: 옛 `src/test/java/com/example/demo/DemoApplicationTests.java` (잘못된 패키지) 제거 + `com.naengo.api_server.integration` 으로 정식 이전
+  - build.gradle: `testcontainersVersion=1.21.4` BOM (1.20.4 의 docker-java 가 client API 1.32 → docker daemon 1.40 요구와 충돌하여 업그레이드)
 - [ ] 8-5. AWS 배포 파일럿 (RDS + S3 + EC2/ECS 중 택일, 인프라 담당자와 합의)
 
-**산출물**: 운영 가능 상태의 서버 + 최소 1개의 통합 테스트
+**산출물**: 운영 가능 상태의 서버 + 통합 테스트 11건 (2026-05-07 시점)
 
 ---
 
