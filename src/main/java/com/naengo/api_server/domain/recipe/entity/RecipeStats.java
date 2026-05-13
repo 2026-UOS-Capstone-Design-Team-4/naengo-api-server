@@ -5,6 +5,13 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/**
+ * 레시피별 좋아요/스크랩 수 캐시. row 자체와 카운터는 모두 DB 트리거로 관리:
+ *  - recipes INSERT → trigger_recipe_stats_create 가 (recipe_id, 0, 0) row 자동 생성
+ *  - likes/scraps INSERT/DELETE → trigger_likes_count / trigger_scrap_count 가 카운터 증감
+ *
+ * 따라서 애플리케이션 코드에서 카운터를 직접 INC/DEC 하지 않는다 (이중 증가 방지).
+ */
 @Entity
 @Table(name = "recipe_stats")
 @Getter
@@ -25,15 +32,4 @@ public class RecipeStats {
 
     @Column(name = "scrap_count", nullable = false)
     private int scrapCount;
-
-    public RecipeStats(Recipe recipe) {
-        this.recipe = recipe;
-        this.likesCount = 0;
-        this.scrapCount = 0;
-    }
-
-    public void incrementLikes() { this.likesCount++; }
-    public void decrementLikes() { if (this.likesCount > 0) this.likesCount--; }
-    public void incrementScrap() { this.scrapCount++; }
-    public void decrementScrap() { if (this.scrapCount > 0) this.scrapCount--; }
 }

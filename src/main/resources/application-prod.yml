@@ -9,6 +9,28 @@ jwt:
   secret: ${JWT_SECRET}
 
 oauth:
+  # 카카오 — 자체 로그인과 함께 운영. 키 누락 시 부팅 실패.
   kakao:
     rest-api-key: ${KAKAO_REST_API_KEY}
     redirect-uri: ${KAKAO_REDIRECT_URI}
+  # 구글 — 현재 미실현 상태 (`docs/changes/oauth-google-status.md`).
+  # SocialAuthService.googleLogin 코드는 있으나 OAuth 흐름 미검증. 운영에서는 비활성.
+
+# CORS — 프론트 도메인은 반드시 env 로 주입 (default 의 localhost 가 prod 에 새지 않게).
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+# 쿠키: HTTPS 만, SameSite=Lax 기본 (필요 시 Strict 로 강화)
+auth:
+  cookie:
+    secure: true
+    same-site: ${AUTH_COOKIE_SAME_SITE:Lax}
+    domain: ${AUTH_COOKIE_DOMAIN:}
+
+# AWS — 버킷 미준비 시 빈 값 그대로 두면 업로드 endpoint 가 503 반환 (의도)
+# 인프라 담당자 합의 후 env 로 주입.
+aws:
+  region: ${AWS_REGION:ap-northeast-2}
+  s3:
+    bucket: ${AWS_S3_BUCKET:}
+    public-url-prefix: ${AWS_S3_PUBLIC_URL_PREFIX:}

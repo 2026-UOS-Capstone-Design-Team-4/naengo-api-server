@@ -1,0 +1,845 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "냉고 AI API",
+    "description": "냉고(Naengo)는 냉장고 속 재료로 레시피를 추천해주는 AI 요리 어시스턴트입니다.\n\n## 주요 기능\n- **채팅**: 재료를 입력하면 AI가 레시피를 추천 (SSE 스트리밍)\n- **레시피**: 벡터 유사도 기반 레시피 검색\n- **어드민**: 레시피 관리\n\n## 인증\n> ⚠️ 현재 사용자 인증이 구현되어 있지 않습니다. 모든 API는 임시로 `user_id = 1` 사용자를 기준으로 동작합니다.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/chat/rooms": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "채팅방 목록 조회",
+        "description": "사용자의 활성 채팅방 목록을 `updated_at` 내림차순으로 반환합니다.\n\n> 삭제된 채팅방(`is_active = false`)은 목록에서 제외됩니다.\n\n**응답 필드**:\n\n| 필드 | 타입 | 설명 |\n|------|------|------|\n| `room_id` | int | 채팅방 ID |\n| `title` | string | 채팅방 제목 (첫 질문 내용) |\n| `created_at` | datetime | 생성 시각 |\n| `updated_at` | datetime | 마지막 수정 시각 |",
+        "operationId": "get_rooms_api_v1_chat_rooms_get",
+        "responses": {
+          "200": {
+            "description": "채팅방 목록",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatRoomResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Rooms Api V1 Chat Rooms Get"
+                },
+                "example": [
+                  {
+                    "room_id": 1,
+                    "title": "김치랑 두부 있는데 뭐 만들 수 있어?",
+                    "created_at": "2026-04-29T12:00:00+09:00",
+                    "updated_at": "2026-04-29T12:05:00+09:00"
+                  },
+                  {
+                    "room_id": 2,
+                    "title": "계란이랑 양배추로 만들 수 있는 거 알려줘",
+                    "created_at": "2026-04-28T10:00:00+09:00",
+                    "updated_at": "2026-04-28T10:03:00+09:00"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "새 채팅방 생성 및 첫 메시지 전송 (SSE)",
+        "description": "새 채팅방을 생성하고 첫 메시지를 전송합니다. 채팅방 제목은 첫 질문 내용으로 자동 설정됩니다.\n\n- **room 이벤트**: 스트림 시작 시 생성된 채팅방 ID를 `{\"room_id\": 1}` 형식으로 전송합니다.\n\n- **응답 방식**: `text/event-stream` 형식으로 이벤트를 실시간 전송합니다.\n- **message 이벤트**: AI 텍스트 청크를 `{\"content\": \"...\"}` 형식으로 스트리밍합니다.\n- **recipes 이벤트**: 답변 완료 후 검색된 레시피 목록을 `RecipeResponse[]` 형식으로 전송합니다. 레시피가 없으면 전송하지 않습니다.\n- **이미지**: `image`에 base64 data URL(`data:image/jpeg;base64,...`)을 포함하면 멀티모달로 동작합니다.\n\n**RecipeResponse 데이터 구조**:\n\n| 필드 | 타입 | 설명 |\n|------|------|------|\n| `id` | int | 레시피 ID |\n| `title` | string | 레시피 제목 |\n| `description` | string | 레시피 설명 |\n| `ingredients` | IngredientItem[] | 재료 목록 |\n| `ingredients_raw` | string | 재료 원문 텍스트 |\n| `instructions` | string[] | 조리 순서 |\n| `servings` | float | 인분 수 |\n| `cooking_time` | int | 조리 시간 (분) |\n| `calories` | int \\| null | 칼로리 (kcal) |\n| `difficulty` | string | 난이도 (`easy` / `normal` / `hard`) |\n| `category` | string[] | 카테고리 |\n| `tags` | string[] | 태그 |\n| `tips` | string[] | 조리 팁 |\n| `video_url` | string \\| null | YouTube 영상 URL |\n| `image_url` | string \\| null | 이미지 URL |\n| `author_type` | string | 작성자 유형 (`ADMIN` / `USER`) |\n\n**IngredientItem 데이터 구조**:\n\n| 필드 | 타입 | 설명 |\n|------|------|------|\n| `name` | string | 재료명 |\n| `amount` | string | 양 |\n| `unit` | string | 단위 |\n| `type` | string | 종류 (메인 / 부재료 등) |\n| `note` | string \\| null | 비고 |",
+        "operationId": "create_room_and_chat_api_v1_chat_rooms_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "SSE 형식의 실시간 스트림 응답",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "example": "event: room\ndata: {\"room_id\": 1}\n\nevent: message\ndata: {\"content\": \"김치\"}\n\nevent: message\ndata: {\"content\": \"와 두부로 만들 수 있는 레시피를 찾았어요!\"}\n\nevent: recipes\ndata: [{\"id\": 1, \"title\": \"김치두부찌개\", \"description\": \"칼칼하고 깊은 맛의 찌개입니다.\", \"ingredients\": [{\"name\": \"김치\", \"amount\": \"200\", \"unit\": \"g\", \"type\": \"메인\", \"note\": \"잘 익은 것\"}], \"ingredients_raw\": \"김치 200g, 두부 1모\", \"instructions\": [\"냄비에 기름을 두르고 김치를 볶는다.\", \"물을 붓고 끓어오르면 두부를 넣는다.\"], \"servings\": 2.0, \"cooking_time\": 20, \"calories\": 180, \"difficulty\": \"easy\", \"category\": [\"한식\", \"찌개\"], \"tags\": [\"얼큰한\", \"국물요리\"], \"tips\": [\"김치는 충분히 익은 것을 사용해야 맛이 좋습니다.\"], \"video_url\": \"https://youtube.com/watch?v=example\", \"image_url\": \"https://example.com/image.jpg\", \"author_type\": \"ADMIN\"}]\n\n"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "채팅방을 찾을 수 없습니다."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/rooms/{room_id}": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "채팅 내역 조회",
+        "description": "채팅방의 전체 메시지를 시간순으로 반환합니다.\n`role = model`인 메시지에 레시피가 있었다면 `recipes` 필드에 전체 레시피 데이터를 포함합니다.\n\n**응답 필드**:\n\n| 필드 | 타입 | 설명 |\n|------|------|------|\n| `message_id` | int | 메시지 ID |\n| `role` | string | 발화자 (`user` / `model`) |\n| `content` | string | 메시지 내용 |\n| `recipes` | RecipeResponse[] \\| null | 추천 레시피 목록 (없으면 null) |\n| `created_at` | datetime | 생성 시각 |\n\n**RecipeResponse 데이터 구조**:\n\n| 필드 | 타입 | 설명 |\n|------|------|------|\n| `id` | int | 레시피 ID |\n| `title` | string | 레시피 제목 |\n| `description` | string | 레시피 설명 |\n| `ingredients` | IngredientItem[] | 재료 목록 |\n| `ingredients_raw` | string | 재료 원문 텍스트 |\n| `instructions` | string[] | 조리 순서 |\n| `servings` | float | 인분 수 |\n| `cooking_time` | int | 조리 시간 (분) |\n| `calories` | int \\| null | 칼로리 (kcal) |\n| `difficulty` | string | 난이도 (`easy` / `normal` / `hard`) |\n| `category` | string[] | 카테고리 |\n| `tags` | string[] | 태그 |\n| `tips` | string[] | 조리 팁 |\n| `video_url` | string \\| null | YouTube 영상 URL |\n| `image_url` | string \\| null | 이미지 URL |\n| `author_type` | string | 작성자 유형 (`ADMIN` / `USER`) |\n\n**IngredientItem 데이터 구조**:\n\n| 필드 | 타입 | 설명 |\n|------|------|------|\n| `name` | string | 재료명 |\n| `amount` | string | 양 |\n| `unit` | string | 단위 |\n| `type` | string | 종류 (메인 / 부재료 등) |\n| `note` | string \\| null | 비고 |",
+        "operationId": "get_room_messages_api_v1_chat_rooms__room_id__get",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Room Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "시간순 메시지 목록",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatMessageResponse"
+                  },
+                  "title": "Response Get Room Messages Api V1 Chat Rooms  Room Id  Get"
+                },
+                "example": [
+                  {
+                    "message_id": 1,
+                    "role": "user",
+                    "content": "김치랑 두부 있는데 뭐 만들 수 있어?",
+                    "created_at": "2026-04-29T12:00:00+09:00"
+                  },
+                  {
+                    "message_id": 2,
+                    "role": "model",
+                    "content": "김치와 두부로 만들 수 있는 김치두부찌개를 추천드려요!",
+                    "recipes": [
+                      {
+                        "id": 1,
+                        "title": "김치두부찌개",
+                        "description": "칼칼하고 깊은 맛의 김치두부찌개입니다.",
+                        "ingredients": [
+                          {
+                            "name": "김치",
+                            "amount": "200",
+                            "unit": "g",
+                            "type": "메인",
+                            "note": "잘 익은 것"
+                          }
+                        ],
+                        "ingredients_raw": "김치 200g, 두부 1모, 돼지고기 100g",
+                        "instructions": [
+                          "냄비에 기름을 두르고 돼지고기를 볶는다.",
+                          "김치를 넣고 함께 볶는다.",
+                          "물을 붓고 끓어오르면 두부를 넣는다.",
+                          "간을 맞추고 5분 더 끓인다."
+                        ],
+                        "servings": 2,
+                        "cooking_time": 20,
+                        "calories": 180,
+                        "difficulty": "easy",
+                        "category": [
+                          "한식",
+                          "찌개"
+                        ],
+                        "tags": [
+                          "얼큰한",
+                          "국물요리"
+                        ],
+                        "tips": [
+                          "김치는 충분히 익은 것을 사용해야 맛이 좋습니다."
+                        ],
+                        "video_url": "https://youtube.com/watch?v=example",
+                        "image_url": "https://example.com/image.jpg",
+                        "author_type": "ADMIN"
+                      }
+                    ],
+                    "created_at": "2026-04-29T12:00:05+09:00"
+                  }
+                ]
+              }
+            }
+          },
+          "404": {
+            "description": "채팅방을 찾을 수 없습니다."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "채팅방 삭제",
+        "description": "채팅방을 숨김 처리합니다.\n\n- 실제 데이터는 삭제되지 않으며 `is_active`가 `false`로 변경됩니다.\n- 삭제된 채팅방은 목록 조회(`GET /rooms`)에서 제외됩니다.\n- 이미 삭제된 채팅방에 요청하면 `404`를 반환합니다.",
+        "operationId": "delete_room_api_v1_chat_rooms__room_id__delete",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Room Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "삭제 성공",
+            "content": {
+              "application/json": {
+                "schema": {},
+                "example": {
+                  "message": "채팅방이 삭제되었습니다."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "채팅방을 찾을 수 없습니다."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "기존 채팅방에서 메시지 전송 (SSE)",
+        "description": "기존 채팅방에서 메시지를 전송합니다. 최근 10개의 대화 이력을 자동으로 불러와 컨텍스트로 사용합니다.\n\n- **응답 방식**: `text/event-stream` 형식으로 이벤트를 실시간 전송합니다.\n- **message 이벤트**: AI 텍스트 청크를 `{\"content\": \"...\"}` 형식으로 스트리밍합니다.\n- **recipes 이벤트**: 답변 완료 후 검색된 레시피 목록을 `RecipeResponse[]` 형식으로 전송합니다. 레시피가 없으면 전송하지 않습니다.\n- **이미지**: `image`에 base64 data URL(`data:image/jpeg;base64,...`)을 포함하면 멀티모달로 동작합니다.\n\n**RecipeResponse 데이터 구조**:\n\n| 필드 | 타입 | 설명 |\n|------|------|------|\n| `id` | int | 레시피 ID |\n| `title` | string | 레시피 제목 |\n| `description` | string | 레시피 설명 |\n| `ingredients` | IngredientItem[] | 재료 목록 |\n| `ingredients_raw` | string | 재료 원문 텍스트 |\n| `instructions` | string[] | 조리 순서 |\n| `servings` | float | 인분 수 |\n| `cooking_time` | int | 조리 시간 (분) |\n| `calories` | int \\| null | 칼로리 (kcal) |\n| `difficulty` | string | 난이도 (`easy` / `normal` / `hard`) |\n| `category` | string[] | 카테고리 |\n| `tags` | string[] | 태그 |\n| `tips` | string[] | 조리 팁 |\n| `video_url` | string \\| null | YouTube 영상 URL |\n| `image_url` | string \\| null | 이미지 URL |\n| `author_type` | string | 작성자 유형 (`ADMIN` / `USER`) |\n\n**IngredientItem 데이터 구조**:\n\n| 필드 | 타입 | 설명 |\n|------|------|------|\n| `name` | string | 재료명 |\n| `amount` | string | 양 |\n| `unit` | string | 단위 |\n| `type` | string | 종류 (메인 / 부재료 등) |\n| `note` | string \\| null | 비고 |",
+        "operationId": "chat_in_room_api_v1_chat_rooms__room_id__post",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Room Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SSE 형식의 실시간 스트림 응답",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "example": "event: room\ndata: {\"room_id\": 1}\n\nevent: message\ndata: {\"content\": \"김치\"}\n\nevent: message\ndata: {\"content\": \"와 두부로 만들 수 있는 레시피를 찾았어요!\"}\n\nevent: recipes\ndata: [{\"id\": 1, \"title\": \"김치두부찌개\", \"description\": \"칼칼하고 깊은 맛의 찌개입니다.\", \"ingredients\": [{\"name\": \"김치\", \"amount\": \"200\", \"unit\": \"g\", \"type\": \"메인\", \"note\": \"잘 익은 것\"}], \"ingredients_raw\": \"김치 200g, 두부 1모\", \"instructions\": [\"냄비에 기름을 두르고 김치를 볶는다.\", \"물을 붓고 끓어오르면 두부를 넣는다.\"], \"servings\": 2.0, \"cooking_time\": 20, \"calories\": 180, \"difficulty\": \"easy\", \"category\": [\"한식\", \"찌개\"], \"tags\": [\"얼큰한\", \"국물요리\"], \"tips\": [\"김치는 충분히 익은 것을 사용해야 맛이 좋습니다.\"], \"video_url\": \"https://youtube.com/watch?v=example\", \"image_url\": \"https://example.com/image.jpg\", \"author_type\": \"ADMIN\"}]\n\n"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "채팅방을 찾을 수 없습니다."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recipes": {
+      "get": {
+        "tags": [
+          "recipes"
+        ],
+        "summary": "레시피 ID 목록으로 조회",
+        "description": "쿼리 파라미터 `ids`에 레시피 ID를 하나 이상 전달하면 해당 레시피 목록을 반환합니다. (예: `?ids=1&ids=2`)",
+        "operationId": "get_recipes_by_ids_api_v1_recipes_get",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "title": "Ids"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "레시피 목록",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecipeResponse"
+                  },
+                  "title": "Response Get Recipes By Ids Api V1 Recipes Get"
+                },
+                "example": [
+                  {
+                    "id": 1,
+                    "title": "김치두부찌개",
+                    "description": "칼칼하고 깊은 맛의 김치두부찌개입니다.",
+                    "ingredients": [
+                      {
+                        "name": "김치",
+                        "amount": "200",
+                        "unit": "g",
+                        "type": "메인",
+                        "note": "잘 익은 것"
+                      }
+                    ],
+                    "ingredients_raw": "김치 200g, 두부 1모, 돼지고기 100g",
+                    "instructions": [
+                      "냄비에 기름을 두르고 돼지고기를 볶는다.",
+                      "김치를 넣고 함께 볶는다.",
+                      "물을 붓고 끓어오르면 두부를 넣는다.",
+                      "간을 맞추고 5분 더 끓인다."
+                    ],
+                    "servings": 2,
+                    "cooking_time": 20,
+                    "calories": 180,
+                    "difficulty": "easy",
+                    "category": [
+                      "한식",
+                      "찌개"
+                    ],
+                    "tags": [
+                      "얼큰한",
+                      "국물요리"
+                    ],
+                    "tips": [
+                      "김치는 충분히 익은 것을 사용해야 맛이 좋습니다."
+                    ],
+                    "video_url": "https://youtube.com/watch?v=example",
+                    "image_url": "https://example.com/image.jpg",
+                    "author_type": "ADMIN"
+                  }
+                ]
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/recipes": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "video_url로 레시피 조회",
+        "description": "`video_url` 쿼리 파라미터로 레시피를 조회합니다.\n\n레시피 등록 전 중복 여부 확인에 사용합니다.",
+        "operationId": "get_recipe_by_video_url_api_v1_admin_recipes_get",
+        "parameters": [
+          {
+            "name": "video_url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Video Url"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "레시피 상세 정보",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecipeResponse"
+                },
+                "example": {
+                  "id": 1,
+                  "title": "김치두부찌개",
+                  "description": "칼칼하고 깊은 맛의 김치두부찌개입니다.",
+                  "ingredients": [
+                    {
+                      "name": "김치",
+                      "amount": "200",
+                      "unit": "g",
+                      "type": "메인",
+                      "note": "잘 익은 것"
+                    }
+                  ],
+                  "ingredients_raw": "김치 200g, 두부 1모, 돼지고기 100g",
+                  "instructions": [
+                    "냄비에 기름을 두르고 돼지고기를 볶는다.",
+                    "김치를 넣고 함께 볶는다.",
+                    "물을 붓고 끓어오르면 두부를 넣는다.",
+                    "간을 맞추고 5분 더 끓인다."
+                  ],
+                  "servings": 2,
+                  "cooking_time": 20,
+                  "calories": 180,
+                  "difficulty": "easy",
+                  "category": [
+                    "한식",
+                    "찌개"
+                  ],
+                  "tags": [
+                    "얼큰한",
+                    "국물요리"
+                  ],
+                  "tips": [
+                    "김치는 충분히 익은 것을 사용해야 맛이 좋습니다."
+                  ],
+                  "video_url": "https://youtube.com/watch?v=example",
+                  "image_url": "https://example.com/image.jpg",
+                  "author_type": "ADMIN"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "레시피를 찾을 수 없습니다."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "헬스 체크",
+        "description": "서버가 정상 동작 중인지 확인합니다.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "서버 정상",
+            "content": {
+              "application/json": {
+                "schema": {},
+                "example": {
+                  "status": "ok",
+                  "message": "Naengo AI API is running"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatMessageResponse": {
+        "properties": {
+          "message_id": {
+            "type": "integer",
+            "title": "Message Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "recipes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RecipeResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "ChatMessageResponse"
+      },
+      "ChatRequest": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "title": "Prompt"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "title": "ChatRequest",
+        "example": {
+          "image": "data:image/jpeg;base64,/9j/4AAQSkZJRgAB...",
+          "prompt": "냉장고 사진이에요. 어떤 요리를 만들 수 있을까요?"
+        }
+      },
+      "ChatRoomResponse": {
+        "properties": {
+          "room_id": {
+            "type": "integer",
+            "title": "Room Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "room_id",
+          "title",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChatRoomResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IngredientItem": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "amount",
+          "unit",
+          "type"
+        ],
+        "title": "IngredientItem"
+      },
+      "RecipeResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "ingredients": {
+            "items": {
+              "$ref": "#/components/schemas/IngredientItem"
+            },
+            "type": "array",
+            "title": "Ingredients",
+            "default": []
+          },
+          "ingredients_raw": {
+            "type": "string",
+            "title": "Ingredients Raw"
+          },
+          "instructions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Instructions",
+            "default": []
+          },
+          "servings": {
+            "type": "number",
+            "title": "Servings"
+          },
+          "cooking_time": {
+            "type": "integer",
+            "title": "Cooking Time"
+          },
+          "calories": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calories"
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "easy",
+              "normal",
+              "hard"
+            ],
+            "title": "Difficulty"
+          },
+          "category": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Category",
+            "default": []
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "tips": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tips",
+            "default": []
+          },
+          "video_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Url"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "author_type": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "USER"
+            ],
+            "title": "Author Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "ingredients_raw",
+          "servings",
+          "cooking_time",
+          "difficulty",
+          "id",
+          "author_type"
+        ],
+        "title": "RecipeResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "chat",
+      "description": "채팅방 관리 및 AI 레시피 추천 채팅. POST 엔드포인트는 SSE 스트리밍 방식으로 응답합니다."
+    },
+    {
+      "name": "recipes",
+      "description": "레시피 조회 API. ID 목록으로 레시피 데이터를 가져옵니다."
+    },
+    {
+      "name": "admin",
+      "description": "관리자 전용 API. 레시피 등록 전 중복 확인 등에 사용합니다."
+    },
+    {
+      "name": "health",
+      "description": "서버 상태 확인 API."
+    }
+  ]
+}

@@ -1,11 +1,14 @@
 package com.naengo.api_server.global.auth;
 
+import com.naengo.api_server.global.logging.RequestIdFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -23,6 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService userDetailsService;
+    private final AuthCookieFactory authCookieFactory;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -41,6 +45,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                // MDC 에 userId put → 이후 로그 라인이 모두 사용자 식별 가능. RequestIdFilter 의 finally 가 clear.
+                MDC.put(RequestIdFilter.MDC_USER_ID, String.valueOf(userId));
             } catch (Exception e) {
                 // 유효하지 않은 토큰 → SecurityContext 비우고 그냥 통과 (인증 안 된 상태로)
                 log.warn("[JWT Filter] {}", e.getMessage());
@@ -52,9 +58,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private String resolveToken(HttpServletRequest request) {
+        // 1) Authorization 헤더 우선 (모바일 / 외부 API 호출)
         String bearer = request.getHeader("Authorization");
         if (StringUtils.hasText(bearer) && bearer.startsWith("Bearer ")) {
             return bearer.substring(7);
+        }
+        // 2) HttpOnly Cookie fallback (브라우저)
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            String name = authCookieFactory.getName();
+            for (Cookie c : cookies) {
+                if (name.equals(c.getName()) && StringUtils.hasText(c.getValue())) {
+                    return c.getValue();
+                }
+            }
         }
         return null;
     }

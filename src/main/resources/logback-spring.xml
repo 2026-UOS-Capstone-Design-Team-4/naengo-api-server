@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+      로그 패턴 (`docs/changes/logging-policy.md`):
+        - 매 요청에 requestId (RequestIdFilter 가 MDC put) → 같은 요청의 로그를 묶을 수 있음
+        - 인증된 요청은 userId 도 (JwtAuthenticationFilter 가 인증 성공 시 MDC put)
+        - 익명 요청은 userId="-" (없음 표시)
+
+      PII (email / nickname / password / token 원문) 은 절대 로깅하지 않는다 — 코드 정책.
+    -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{requestId:-no-req-id}] [user=%X{userId:--}] [%thread] %logger{36} - %msg%n"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <!-- 운영에서 RDS / 외부 호출 디버깅 시 일시적으로 켜는 logger 들. 기본은 비활성화. -->
+    <logger name="org.hibernate.SQL" level="WARN"/>
+    <logger name="org.hibernate.orm.jdbc.bind" level="WARN"/>
+</configuration>

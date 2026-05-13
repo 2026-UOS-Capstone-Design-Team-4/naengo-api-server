@@ -2,6 +2,7 @@
 
 > **위치**: Step 8 에서 JUnit 통합 테스트로 자동화하기 전, **수동으로** 돌려 확신을 얻기 위한 체크리스트.
 > **선결**: `docker compose up -d` 로 로컬 Postgres(pgvector) 가 기동 중이어야 한다.
+> **AI 서버 contract 가 닿는 테이블** (`recipes.embedding`, `chat_rooms`, `chat_messages`) 의 검증 항목은 [AI 서버 OpenAPI](http://43.201.62.254:8000/docs) (로컬 스냅샷: [`api-1.json`](api-1.json)) 와 대조하며 본다. 본 가이드의 기대값과 docs 가 어긋나면 docs 가 우선.
 
 모든 커맨드는 저장소 루트에서 실행한다고 가정한다.
 
@@ -36,13 +37,16 @@ FROM flyway_schema_history ORDER BY installed_rank;
 ```
 
 기대값:
-| rank | version | description             | success |
-|------|---------|-------------------------|---------|
-| 1    | 1       | init                    | t       |
-| 2    | 2       | add social login fields | t       |
-| 3    | 3       | add user deleted at     | t       |
+| rank | version | description              | success |
+|------|---------|--------------------------|---------|
+| 1    | 1       | init                     | t       |
+| 2    | 2       | add social login fields  | t       |
+| 3    | 3       | add user deleted at      | t       |
+
+> V1 은 2026-05-02 PR 에서 구 V4 (`V4__fixed_schema.sql`) 의 설계를 흡수해 재작성됨. 자세한 변경 내용은 [`api-server-tasks.md §1.5`](api-server-tasks.md). 협업자별 로컬 DB 는 `docker compose down -v` 로 wipe 필수 (이전 V1 의 체크섬과 다르므로).
 
 - [ ] 3건 모두 `success = true`
+- [ ] V4 row 가 보이면 stale state — `docker compose down -v` 로 history wipe 후 재기동
 
 ---
 
@@ -50,23 +54,54 @@ FROM flyway_schema_history ORDER BY installed_rank;
 
 ```sql
 \d users
+\d user_profiles
 \d recipes
+\d pending_recipes
 \d recipe_stats
 \d scraps
 \d likes
 \d chat_rooms
-\d session_logs
-\d fridge
+\d chat_messages
+SELECT trigger_name, event_manipulation, event_object_table
+FROM information_schema.triggers
+ORDER BY event_object_table, trigger_name;
+-- trigger_likes_count / trigger_scrap_count / trigger_recipe_stats_create 가 보여야 함
 ```
 
 확인 포인트:
 - [ ] `users.provider` (VARCHAR(20) NOT NULL DEFAULT 'LOCAL')
-- [ ] `users.provider_id` (VARCHAR(255), UNIQUE 복합 제약 `uq_provider_provider_id`)
-- [ ] `users.deleted_at` (TIMESTAMPTZ NULL)
+- [ ] `users.provider_id` (VARCHAR(255), UNIQUE 복합 제약 `uq_provider_provider_id` — V2 가 추가)
+- [ ] `users.deleted_at` (TIMESTAMPTZ NULL) — V3 가 추가
+- [ ] `users.is_active` (BOOLEAN NOT NULL DEFAULT TRUE)
+- [ ] `users.password_hash` 가 nullable (소셜 로그인용)
 - [ ] `recipes.embedding` (`vector(1536)` 타입)
 - [ ] `recipes.author_id` 가 `BIGINT REFERENCES users(user_id) ON DELETE SET NULL`
+- [ ] `recipes.author_type` (VARCHAR(20) CHECK ADMIN/USER, DEFAULT 'ADMIN')
+- [ ] `recipes.is_active` (BOOLEAN NOT NULL DEFAULT TRUE)
+- [ ] `recipes` 에 AI contract 정합 컬럼 11개:
+  - `description TEXT NOT NULL`
+  - `ingredients JSONB NOT NULL` (IngredientItem[])
+  - `ingredients_raw TEXT NOT NULL`
+  - `instructions JSONB NOT NULL` (string[])
+  - `servings NUMERIC(4,1) NOT NULL`
+  - `cooking_time INTEGER NOT NULL` (분)
+  - `calories INTEGER` (NULL 가능)
+  - `difficulty VARCHAR(10)` CHECK (`easy`/`normal`/`hard`)
+  - `category JSONB NOT NULL` (string[])
+  - `tags JSONB NOT NULL DEFAULT '[]'`
+  - `tips JSONB NOT NULL DEFAULT '[]'`
+  - `video_url VARCHAR(512)`
+- [ ] `recipes(video_url)` 부분 인덱스 (`WHERE video_url IS NOT NULL`)
+- [ ] `pending_recipes` 테이블 + `idx_pending_recipes_user_id` / `idx_pending_recipes_status`
+- [ ] `chat_messages` 테이블 (`role` CHECK `user`/`model`, `recipe_ids JSONB`)
+- [ ] `chat_rooms.room_id` 이 `BIGSERIAL` (구 V1 의 `VARCHAR(100)` 폐기 됨)
+- [ ] `user_profiles` 테이블 — `users.preferences` 가 컬럼별로 분리됨
 - [ ] `scraps`, `likes` 의 FK 가 `ON DELETE CASCADE`
-- [ ] `session_logs.selected_recipe_id` FK 에 `ON DELETE` 지정 없음 (NO ACTION). 이 경우 API 서버가 애플리케이션 단에서 NULL 처리 후 삭제해야 한다 — §8 에서 검증.
+- [ ] DB 트리거 3종이 존재
+  ```sql
+  SELECT trigger_name FROM information_schema.triggers
+  WHERE trigger_name IN ('trigger_likes_count','trigger_scrap_count','trigger_recipe_stats_create');
+  ```
 
 ---
 
@@ -126,135 +161,181 @@ echo $TOKEN
 
 ---
 
-## 6. 레시피 작성 → `recipes` + `recipe_stats` 동일 트랜잭션 INSERT
+## 6. 사용자 레시피 제출 → `pending_recipes` INSERT
+
+> **2026-05-04 갱신**: V4 통합 후 사용자 작성은 `recipes` 가 아닌 `pending_recipes` 테이블로 들어간다 (`SPEC-20260502-02` recipe-create v2). 승인되면 admin 이 `recipes` 로 옮긴다 (`SPEC-20260504-02`). 본 §은 사용자 제출 단계 검증.
 
 ```bash
 curl -s -X POST http://localhost:8080/api/recipes \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{
     "title":"김치볶음밥",
-    "fullContent":"1. 팬에 기름\n2. 김치 볶기",
-    "ingredients":[{"name":"김치","amount":"200g"},{"name":"밥","amount":"1공기"}]
+    "content":"1. 팬에 기름\n2. 김치 볶기",
+    "ingredients":[
+      {"name":"김치","amount":"200","unit":"g","type":"메인","note":null},
+      {"name":"밥",  "amount":"1",  "unit":"공기","type":"메인","note":null}
+    ]
   }' | jq
 ```
 
-- [ ] 응답 `{"success":true,"data":{"recipeId":<n>,"status":"PENDING"}}`
+- [ ] 응답 `{"success":true,"data":{"pendingRecipeId":<n>,"status":"PENDING"}}`
 
 ```sql
-SELECT r.recipe_id, r.source, r.status, r.author_id, r.ingredients,
-       s.likes_count, s.scrap_count
-FROM recipes r LEFT JOIN recipe_stats s USING (recipe_id);
+SELECT pending_recipe_id, user_id, title, content, ingredients, status, is_active
+FROM pending_recipes;
 ```
 
-- [ ] `source = 'USER'`, `status = 'PENDING'`
-- [ ] `ingredients` 가 JSONB 배열로 저장됨 (psql 에서 바로 보임)
-- [ ] `recipe_stats` 도 같이 INSERT 되어 `likes_count = 0, scrap_count = 0`
+- [ ] `status = 'PENDING'`, `is_active = true`
+- [ ] `ingredients` JSONB 가 `{name, amount, unit, type, note}` element schema 로 저장
 
-**실패 케이스**: 서비스가 예외 던지면 두 INSERT 모두 롤백되는지 확인. 예: 엔드포인트 호출 직전에 `application.yml` 의 `aws.s3.public-url-prefix` 를 `https://invalid/` 로 바꾸고 외부 URL 을 보내면 400. 이후 DB 재조회 시 row 0 이어야 함.
+> 승인 후 `recipes` 테이블에 row 가 생기고 트리거 `trigger_recipe_stats_create` 가 `recipe_stats(recipe_id, 0, 0)` 자동 INSERT. `recipe_stats` 의 사용자 작성 단계 INSERT 는 더 이상 발생하지 않는다.
 
-- [ ] 롤백 케이스: `recipes` / `recipe_stats` 모두 row 없음
+**실패 케이스 (롤백)**: `aws.s3.public-url-prefix` 를 `https://invalid/` 로 설정하고 외부 `imageUrl` 보내면 400. `pending_recipes` 에 row 없어야 함.
+
+- [ ] 롤백 케이스: `pending_recipes` row 0
 
 ---
 
-## 7. 목록·단건·내 레시피 권한
+## 7. 공개 목록 / 단건 / 내 제출 권한
 
-PENDING 상태에서:
+> **2026-05-04 갱신**: 공개 목록은 `recipes.is_active = true` 만 (`SPEC-20260502-03` recipe-read v2). 사용자 제출(PENDING) 은 `pending_recipes` 에 별도 — `/api/recipes/my` 가 그쪽 조회.
 
-```bash
-# 비로그인으로 목록 조회 → PENDING 은 안 나와야 함
-curl -s http://localhost:8080/api/recipes | jq '.data.items | length'
-# 0 이어야 함 (APPROVED 만 노출)
-
-# 비로그인으로 PENDING 단건 → 403
-curl -si http://localhost:8080/api/recipes/1 | head -1
-# HTTP/1.1 403 ...
-
-# 본인이 단건 조회 → 200
-curl -si -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/recipes/1 | head -1
-
-# 내 레시피 목록 (비로그인) → 401
-curl -si http://localhost:8080/api/recipes/my | head -1
-
-# 내 레시피 목록 (본인) → PENDING 포함
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/recipes/my | jq
-```
-
-- [ ] 위 4가지 권한 분기가 모두 기대대로 동작
-
-수동 승인으로 목록 등장 확인:
+테스트를 위해 admin 이 위 §6 의 pending 을 승인해 둔 상태:
 ```sql
-UPDATE recipes SET status = 'APPROVED' WHERE recipe_id = 1;
+-- ADMIN 권한이 있는 사용자가 필요. 첫 사용자를 ADMIN 으로 임시 승급:
+UPDATE users SET role = 'ADMIN' WHERE user_id = 1;
 ```
+그 뒤 admin 토큰으로 승인 호출:
 ```bash
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"a@b.c","password":"pw123456"}' | jq -r '.data.accessToken')
+curl -s -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"adminNote":"테스트 승인"}' \
+  http://localhost:8080/api/admin/pending-recipes/1/approve | jq
+# 응답에 recipeId 가 새로 발급됨. 이후부턴 그 recipeId 로 조회.
+```
+
+```bash
+# 1) 비로그인 공개 목록 (활성 레시피만)
 curl -s http://localhost:8080/api/recipes | jq '.data.totalElements'
-# 1 이어야 함
+# 1 이상 (방금 승인된 recipe 등장)
+
+# 2) 비로그인 단건 (활성 레시피)
+curl -si http://localhost:8080/api/recipes/1 | head -1
+# HTTP/1.1 200 OK
+
+# 3) 내 제출 목록 (비로그인) → 401
+curl -si http://localhost:8080/api/recipes/my | head -1
+# HTTP/1.1 401
+
+# 4) 내 제출 목록 (본인) → pending_recipes 의 본인 행, 모든 status
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/recipes/my | jq
+# items[0].status = 'APPROVED' (방금 승인됨), pendingRecipeId, adminNote 노출
 ```
 
-- [ ] APPROVED 승인 후 공개 목록에 등장
+비활성화 검증:
+```sql
+UPDATE recipes SET is_active = false WHERE recipe_id = 1;
+```
+```bash
+curl -si http://localhost:8080/api/recipes/1 | head -1
+# HTTP/1.1 404 (RECIPE_NOT_FOUND — is_active=false 면 미노출)
+```
+
+- [ ] 공개 목록 정상
+- [ ] 비로그인 활성 단건 → 200
+- [ ] is_active=false 단건 → 404
+- [ ] /my 비로그인 → 401, 본인 → pending_recipes 노출
 
 ---
 
-## 8. 레시피 삭제 — FK CASCADE + session_logs 선행 NULL 처리
+## 8. 레시피 삭제 — pending_recipes 본인 삭제 (V4 후 의미 변경)
 
-세팅: scraps·likes·session_logs 가 참조하도록 수동 INSERT.
+> **2026-05-04 갱신**: V4 통합으로 `session_logs` 테이블 폐기. `DELETE /api/recipes/{id}` 의 `{id}` 는 이제 **`pending_recipe_id`** 의 의미 (`SPEC-20260502-04` recipe-delete v2). 승인된 `recipes` 의 삭제는 admin 영역(Step 6 이후 별도 endpoint).
 
-```sql
-INSERT INTO scraps (user_id, recipe_id) VALUES (1, 1);
-INSERT INTO likes  (user_id, recipe_id) VALUES (1, 1);
+세팅 (위 §6 으로 pending 1건 만든 상태):
 
-INSERT INTO chat_rooms (room_id, user_id) VALUES ('room-a', 1);
-INSERT INTO session_logs (session_id, room_id, user_id, selected_recipe_id)
-VALUES ('sess-a', 'room-a', 1, 1);
+```bash
+# pending 1건 추가 (승인 안 함)
+curl -s -X POST http://localhost:8080/api/recipes \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"title":"삭제 테스트","content":"본문"}' > /dev/null
 ```
 
-삭제 호출:
+```sql
+SELECT pending_recipe_id, user_id, title, status FROM pending_recipes;
+```
+
+본인 삭제 호출:
 ```bash
-curl -si -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/recipes/1
+curl -si -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/recipes/2
 # HTTP/1.1 204
 ```
 
 검증:
 ```sql
-SELECT * FROM recipes      WHERE recipe_id = 1;  -- 0 rows
-SELECT * FROM recipe_stats WHERE recipe_id = 1;  -- 0 rows (CASCADE)
-SELECT * FROM scraps       WHERE recipe_id = 1;  -- 0 rows (CASCADE)
-SELECT * FROM likes        WHERE recipe_id = 1;  -- 0 rows (CASCADE)
-SELECT selected_recipe_id FROM session_logs WHERE session_id = 'sess-a';
--- NULL 이어야 함 (애플리케이션이 선행 UPDATE 수행)
+SELECT * FROM pending_recipes WHERE pending_recipe_id = 2;  -- 0 rows
 ```
 
-- [ ] `recipes` 삭제됨
-- [ ] `recipe_stats`, `scraps`, `likes` 가 CASCADE 로 같이 삭제
-- [ ] `session_logs.selected_recipe_id` 는 NULL (row 는 남음)
+- [ ] `pending_recipes` 본인 row 삭제됨
+- [ ] `recipes` 는 영향 없음
 
-타인 삭제 시도:
-- 다른 유저로 로그인한 토큰으로 같은 엔드포인트 호출 → 403 `FORBIDDEN`
-- [ ] 권한 오류가 의도대로 떨어짐
+타인 / 권한:
+- 다른 유저 토큰으로 같은 endpoint 호출 → 403 `FORBIDDEN`
+- 존재하지 않는 id → 404 `PENDING_RECIPE_NOT_FOUND`
+- [ ] 권한·존재 분기 모두 의도대로
+
+좋아요 / 스크랩 cascade 검증 (recipes 행 삭제 시):
+```sql
+INSERT INTO likes (user_id, recipe_id) VALUES (1, 1);
+INSERT INTO scraps (user_id, recipe_id) VALUES (1, 1);
+DELETE FROM recipes WHERE recipe_id = 1;
+SELECT * FROM likes WHERE recipe_id = 1;       -- 0 rows (CASCADE)
+SELECT * FROM scraps WHERE recipe_id = 1;      -- 0 rows (CASCADE)
+SELECT * FROM recipe_stats WHERE recipe_id = 1; -- 0 rows (CASCADE)
+```
+
+- [ ] recipes DELETE 시 likes / scraps / recipe_stats 모두 CASCADE 로 같이 삭제 (트리거 카운터 감소도 발화)
 
 ---
 
-## 9. 탈퇴 사용자 닉네임 치환 (수동)
+## 9. 탈퇴 사용자 닉네임 치환
 
-Step 4 구현 전까지는 탈퇴 API 가 없으므로 DB 에서 직접 조작해 테스트.
+> **2026-05-04 갱신**: Step 4 (`SPEC-20260503-07` user-withdraw) 가 완료되어 `DELETE /api/users/me` API 가 존재. 본 §은 (a) endpoint 호출 / (b) DB 직접 조작 두 가지 방식 모두 지원.
 
+방식 A — 탈퇴 endpoint 호출:
+```bash
+curl -si -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/users/me
+# HTTP/1.1 204
+```
+
+방식 B — DB 직접:
 ```sql
--- 레시피 하나 APPROVE 해서 목록에 띄워둔 상태 기준
 UPDATE users
 SET nickname = '탈퇴한 사용자_1',
-    deleted_at = NOW()
+    deleted_at = NOW(),
+    is_blocked = true,
+    is_active = false,
+    email = NULL,
+    password_hash = NULL
 WHERE user_id = 1;
 ```
 
+공개 응답 확인:
 ```bash
 curl -s http://localhost:8080/api/recipes | jq '.data.items[0].authorNickname'
-# "탈퇴한 사용자"   <- 꼬리표 제거된 형태로 보여야 함
+# "탈퇴한 사용자"   <- 꼬리표 제거된 형태로 보여야 함 (AuthorDisplayName)
 ```
 
 - [ ] `authorNickname` 이 `"탈퇴한 사용자"` (꼬리표 없음)
 
-원복 (다음 검증 진행을 위해):
+원복 (다음 검증 진행을 위해 — 방식 B 만):
 ```sql
-UPDATE users SET nickname = 'tester', deleted_at = NULL WHERE user_id = 1;
+UPDATE users
+SET email='a@b.c', password_hash='$2a$10$...', nickname='tester',
+    deleted_at=NULL, is_blocked=false, is_active=true
+WHERE user_id = 1;
 ```
 
 ---

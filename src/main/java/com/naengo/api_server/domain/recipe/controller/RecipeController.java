@@ -1,5 +1,6 @@
 package com.naengo.api_server.domain.recipe.controller;
 
+import com.naengo.api_server.domain.recipe.dto.PendingRecipeListResponse;
 import com.naengo.api_server.domain.recipe.dto.RecipeCreateRequest;
 import com.naengo.api_server.domain.recipe.dto.RecipeCreateResponse;
 import com.naengo.api_server.domain.recipe.dto.RecipeDetailResponse;
@@ -22,6 +23,7 @@ public class RecipeController {
 
     private final RecipeService recipeService;
 
+    /** 사용자 레시피 제출 → pending_recipes 에 INSERT. */
     @PostMapping
     public ResponseEntity<ApiResponse<RecipeCreateResponse>> create(
             @Valid @RequestBody RecipeCreateRequest request) {
@@ -32,6 +34,7 @@ public class RecipeController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
     }
 
+    /** 공개 레시피 목록 (recipes, is_active=true). */
     @GetMapping
     public ResponseEntity<ApiResponse<RecipeListResponse>> list(
             @RequestParam(defaultValue = "0") int page,
@@ -41,20 +44,23 @@ public class RecipeController {
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    /** 내가 제출한 레시피 (pending_recipes, 모든 상태). */
     @GetMapping("/my")
-    public ResponseEntity<ApiResponse<RecipeListResponse>> listMine(
+    public ResponseEntity<ApiResponse<PendingRecipeListResponse>> listMine(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        RecipeListResponse response = recipeService.listMine(page, size);
+        PendingRecipeListResponse response = recipeService.listMine(page, size);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    /** 단건 조회 (recipes 만). */
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<RecipeDetailResponse>> detail(@PathVariable Long id) {
         RecipeDetailResponse response = recipeService.detail(id);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    /** 본인 제출 레시피 삭제 (pending_recipe_id). */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         recipeService.delete(id);

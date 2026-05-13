@@ -20,10 +20,17 @@ public enum ErrorCode {
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
     NICKNAME_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     USER_BLOCKED(HttpStatus.FORBIDDEN, "차단된 사용자입니다."),
+    SOCIAL_PASSWORD_NOT_ALLOWED(HttpStatus.FORBIDDEN, "소셜 로그인 사용자는 비밀번호를 변경할 수 없습니다."),
+    ALREADY_WITHDRAWN(HttpStatus.CONFLICT, "이미 탈퇴된 사용자입니다."),
 
     // ─── Recipe ──────────────────────────────────────────
     RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 레시피입니다."),
-    RECIPE_NOT_APPROVED(HttpStatus.FORBIDDEN, "승인되지 않은 레시피입니다."),
+    PENDING_RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 제출 레시피입니다."),
+    PENDING_RECIPE_NOT_REVIEWABLE(HttpStatus.CONFLICT, "이미 승인 또는 반려된 레시피입니다."),
+    PENDING_RECIPE_INCOMPLETE(HttpStatus.UNPROCESSABLE_ENTITY, "승인에 필요한 필수 필드가 누락되어 있습니다."),
+
+    // ─── Chat ────────────────────────────────────────────
+    CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 채팅방입니다."),
 
     // ─── Common ──────────────────────────────────────────
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
