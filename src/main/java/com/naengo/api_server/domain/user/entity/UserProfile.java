@@ -114,4 +114,13 @@ public class UserProfile {
         if (servingSize != null) this.servingSize = servingSize;
         this.updatedAt = ZonedDateTime.now();
     }
+
+    /**
+     * {@code user_input} 전체 교체 (api-3.json PATCH /profile 시맨틱).
+     * null 은 빈 배열로 정규화 (NOT NULL 컬럼). AI 분석 영역은 보존.
+     */
+    public void replaceUserInput(List<String> userInput) {
+        this.userInput = userInput == null ? List.of() : userInput;
+        this.updatedAt = ZonedDateTime.now();
+    }
 }

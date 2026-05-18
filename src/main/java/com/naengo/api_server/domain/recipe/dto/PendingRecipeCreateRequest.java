@@ -12,13 +12,12 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 사용자 레시피 제출 요청. pending_recipes 테이블에 INSERT 된다.
+ * 사용자 레시피 제출 요청 — api-3.json {@code PendingRecipeCreate} 와 정합.
+ * pending_recipes 테이블에 INSERT 된다.
  *
  * <p>최소 필수: title + content. 나머지는 선택 (관리자 승인 시 보정 가능).
- * AI 서버 contract (`docs/spec/ai-server-contract.md §3.1`) 의 RecipeResponse 스키마를
- * 따르되, 사용자 단계에서는 모든 메타가 강제는 아니다.
  */
-public record RecipeCreateRequest(
+public record PendingRecipeCreateRequest(
         @NotBlank @Size(max = 255)   String title,
         @Size(max = 1000)            String description,
         @NotBlank @Size(max = 10000) String content,

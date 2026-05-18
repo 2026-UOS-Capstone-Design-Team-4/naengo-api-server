@@ -31,6 +31,36 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 
 ## 1. 현재 코드베이스 인벤토리 (2026-05-02 갱신, Step 2 일부 완료 + V4 도입 결정)
 
+> ⚠️ **2026-05-16 갱신 — 본 §1 의 일부 행은 PR-1~7 이전 상태**. api-3.json 정합 작업으로
+> 엔드포인트/응답/DTO 가 대거 변경되었다. **현행 진실원본은
+> [`docs/spec/api3-alignment-and-integration.md §1 / §1.1`](spec/api3-alignment-and-integration.md)**
+> (PR 진행 로그는 같은 문서 §6). 아래 표는 "어떤 컴포넌트가 존재하는가" 정도로만 보고,
+> 정확한 경로·시그니처는 §1.1 엔드포인트 표를 본다.
+
+### 1.0 PR-1~7 적용 요약 (2026-05-16)
+
+| PR | 내용 |
+|---|---|
+| PR-0 | docs 정리(archive 이동 + README 통합), **구글 소셜 전면 제거** (`user-domain-todo.md §1`) |
+| PR-1 | `/api/v1/...` prefix 전 컨트롤러 + SecurityConfig |
+| PR-2 | `ApiResponse<T>` 폐기 → 성공 raw + 표준 `ErrorResponse{error:{code,message,details}}` |
+| PR-3 | 레시피 목록 커서 페이지네이션 + `is_liked`/`is_scrapped`, 단건=목록 동형(`RecipeListItemResponse`), `RecipeDetailResponse` 폐기 |
+| PR-4 | `pending-recipes` 분리 (`PendingRecipeController/Service/Response`), soft delete. `RecipeController`=공개 조회 전용 |
+| PR-5 | 좋아요/스크랩 토글 → POST/DELETE 분리 + 409(`ALREADY_*`/`NOT_*`), `RecipeStatsResponse`, scrap list → `/api/v1/users/me/scraps` |
+| PR-6 | admin 단일 `PATCH /api/v1/admin/pending-recipes/{id}` (부분수정+승격), `GET /api/v1/admin/recipes?video_url=`, 승인 미충족 422→400 |
+| PR-7 | `/profile`=user_input 전용 + `/preferences` 확장 분리, 채팅 plain array + snake_case + `/messages` suffix 제거 + soft DELETE |
+| User 보강 | 회원가입·카카오 신규가입 시 `user_profiles` 자동 생성(§5-1/§4-2), 카카오 통합 테스트 5건(`SocialAuthIntegrationTest`), 자체 로그인/검증 정책 점검 (`user-domain-todo.md §4·§5`). 팀 공유 문서 [`auth-user-api.md`](auth-user-api.md) 발행 |
+| 전역 snake_case | `spring.jackson.property-naming-strategy=SNAKE_CASE` — `AuthResponse`/`UserMeResponse`/요청 DTO 등 camelCase 잔존분 일괄 정합. 명시적 `@JsonProperty` 우선 유지. 통합 테스트 29건 PASS (2026-05-17) |
+| 미완 (PR-8) | 헬스체크 `GET /` 추가, AI 팀 협의(D-1~D-7). 외부 협의 트랙 |
+
+폐기된 DTO: `ApiResponse`, `RecipeDetailResponse`, `RecipeCreateRequest/Response`,
+`PendingRecipeListResponse/ListItemResponse`, `LikeToggleResponse`, `ScrapToggleResponse`,
+`RecipeApproval/Rejection Request/Response`, `ChatRoomListResponse`, `ChatMessageListResponse`,
+`GoogleOAuthClient`. 신설: `ErrorResponse`, `RecipeStatsResponse`, `PendingRecipeResponse`,
+`PendingRecipeCreateRequest`, `PendingRecipeAdminUpdateRequest`, `UserProfileResponse`,
+`UserInputUpdateRequest`, `PendingRecipeController`, `PendingRecipeService`,
+`AdminRecipeLookupController`. 통합 테스트 **30건 PASS** (Auth 8 + Cors 4 + ProfileChat 3 + Recipe 6 + RequestId 4 + SocialAuth 5). 회원 탈퇴 시 본인 `chat_rooms` soft delete(`is_active=false`) 적용 (2026-05-17, 무충돌; 메시지 hard delete 는 AI 합의 후 승격).
+
 ### 이미 구현된 것
 
 | 영역 | 파일 | 상태 |
@@ -40,7 +70,7 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 | 보안 설정 | `global/config/SecurityConfig.java` | OK (`/health` permitAll 반영) |
 | JWT | `global/auth/JwtTokenProvider.java`, `JwtAuthenticationFilter.java`, `CustomUserDetailsService.java` | OK |
 | 예외 | `global/exception/{CustomException, GlobalExceptionHandler, ErrorCode}.java` | OK. 미사용 `ErrorCode` 는 **선언 시점에만 추가** 정책 도입 (ErrorCode.java 하단 주석 참조) |
-| OAuth | `global/auth/oauth/{Kakao,Google}OAuthClient.java`, `KakaoTokenClient.java`, `OAuthUserInfo.java`, `DevOAuthController.java` | 카카오 OK (dev 환경 검증). **구글은 미실현 — 코드 placeholder 만** (`docs/changes/oauth-google-status.md`) |
+| OAuth | `global/auth/oauth/KakaoOAuthClient.java`, `KakaoTokenClient.java`, `OAuthUserInfo.java`, `DevOAuthController.java` | 카카오 OK (dev 환경 검증). **구글 소셜은 2026-05-13 제거 결정** (`docs/spec/user-domain-todo.md §1`). |
 | User 도메인 | `domain/user/{entity,dto,repository,service,controller}/*` | OK (signup / login / social) + **2026-05-03 Step 4 완료**: 마이페이지 조회/수정, 비밀번호 변경, 회원 탈퇴 익명화 (`UserMeService` / `UserMeController`). **2026-05-04 후속**: `UserProfile` 엔티티 + 선호도 endpoint (`GET/PUT /api/users/me/profile`) |
 | Auth 가드 | `global/auth/{JwtAuthenticationEntryPoint, JwtAccessDeniedHandler}.java` | **2026-05-04 신규** — 미인증 → 401 + ApiResponse, 미인가 → 403 + ApiResponse 일관 응답 |
 | Auth 쿠키 | `global/auth/AuthCookieFactory.java` + `JwtAuthenticationFilter` 쿠키 fallback + `AuthController.logout` | **2026-05-07 신규 (`SPEC-20260507-01`)** — JWT 를 HttpOnly Cookie 로 발급/만료. Authorization 헤더 + 쿠키 양쪽 지원 (헤더 우선). `auth.cookie.*` env 분리 (local: secure=false, prod=true) |
@@ -297,11 +327,11 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
 - ❌ 챗봇 대화 상태 머신 (= AI 서버, API 서버는 결과만 저장)
 - ❌ 프론트엔드 화면, 소셜 로그인 SDK 호출 (= 프론트)
 
-> **2026-05-02 갱신**: 기존 "❌ 카카오/구글에서 access token 받기까지" 항목 삭제.
-> 코드 상으로 `KakaoTokenClient` (인가 코드 → 액세스 토큰 교환), `KakaoOAuthClient` / `GoogleOAuthClient` (액세스 토큰 → 사용자 정보) 가 이미 API 서버에 존재하므로 경계선 기술이 잘못됐음. 합의된 흐름:
-> 1. 프론트가 카카오/구글 SDK 또는 redirect 로 **인가 코드** 또는 **액세스 토큰** 을 획득
+> **2026-05-02 갱신** (2026-05-13 카카오 단독으로 정리):
+> 코드 상으로 `KakaoTokenClient` (인가 코드 → 액세스 토큰 교환), `KakaoOAuthClient` (액세스 토큰 → 사용자 정보) 가 이미 API 서버에 존재. 합의된 흐름:
+> 1. 프론트가 카카오 SDK 또는 redirect 로 **인가 코드** 또는 **액세스 토큰** 을 획득
 > 2. API 서버가 (필요 시) 인가 코드 → 액세스 토큰 교환 (`KakaoTokenClient`)
-> 3. API 서버가 제공자 API 호출로 사용자 정보 조회 (`*OAuthClient`)
+> 3. API 서버가 카카오 API 호출로 사용자 정보 조회 (`KakaoOAuthClient`)
 > 4. 자체 JWT 발급 → **HttpOnly 쿠키로 프론트와 주고받음** (Phase 0-1 갱신, 아래 §"인증 흐름 갱신" 참조)
 
 내가 하는 건: **그 결과물을 받아 검증·저장·재가공하고, 다시 정형화된 응답으로 내보내는 것**.
@@ -625,7 +655,7 @@ API 서버는 **"앱(프론트)과 1차로 마주하고, 도메인 데이터의 
   - `application-prod.yml` 에 default 없는 env 자리표시자: `DB_URL/USERNAME/PASSWORD`, `JWT_SECRET`, `KAKAO_REST_API_KEY/REDIRECT_URI`, `CORS_ALLOWED_ORIGINS` (누락 시 부팅 실패). `AUTH_COOKIE_SECURE: true` 명시 override.
   - `application.yml` 의 default (`localhost:3000` 등) 가 prod 에 새지 않게 강제 — 로컬에만 적용
   - AI 서버 base URL / 내부 토큰은 Step 7 진행 시 추가 (옵션 A 선택 시)
-  - 구글 OAuth 는 미실현이므로 prod env 미요구 (`docs/changes/oauth-google-status.md`)
+  - 구글 OAuth 는 2026-05-13 제거 (`docs/spec/user-domain-todo.md §1`)
   - README 의 환경변수 표 갱신 — prod 필수 ✅ 표시 + 그룹별 (DB / JWT / CORS / OAuth / AWS) 구조
 - [x] 8-3. **로깅 정책 — 2026-05-08 완료**. `RequestIdFilter` 가 `X-Request-Id` 자동 부여 + MDC put + 응답 헤더 echo. `JwtAuthenticationFilter` 가 인증 성공 시 MDC `userId` put. `logback-spring.xml` 패턴에 `[%X{requestId}] [user=%X{userId}]`. PII 로그 금지 정책은 [`docs/changes/logging-policy.md`](changes/logging-policy.md). 통합 테스트 4건 (`RequestIdIntegrationTest`)
 - [x] 8-4. **통합 테스트** — 2026-05-07 완료

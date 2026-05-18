@@ -49,7 +49,6 @@ I want 응답 body 의 accessToken 을 받아 SecureStorage 에 저장하고
 | `POST /api/auth/signup` | `AuthResponse{userId, nickname, role, accessToken}` | `NAENGO_AT=<jwt>; HttpOnly; ...` |
 | `POST /api/auth/login` | 동상 | 동상 |
 | `POST /api/auth/social/kakao` | 동상 | 동상 |
-| `POST /api/auth/social/google` | 동상 | 동상 |
 
 ### 3.2 만료 시점 — Set-Cookie value="" + Max-Age=0
 

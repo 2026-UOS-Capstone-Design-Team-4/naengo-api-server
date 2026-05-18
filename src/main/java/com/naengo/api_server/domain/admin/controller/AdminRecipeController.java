@@ -2,57 +2,50 @@ package com.naengo.api_server.domain.admin.controller;
 
 import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeDetailResponse;
 import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeListResponse;
-import com.naengo.api_server.domain.admin.dto.RecipeApprovalRequest;
-import com.naengo.api_server.domain.admin.dto.RecipeApprovalResponse;
-import com.naengo.api_server.domain.admin.dto.RecipeRejectionRequest;
-import com.naengo.api_server.domain.admin.dto.RecipeRejectionResponse;
+import com.naengo.api_server.domain.admin.dto.PendingRecipeAdminUpdateRequest;
 import com.naengo.api_server.domain.admin.service.AdminRecipeService;
+import com.naengo.api_server.domain.recipe.dto.PendingRecipeResponse;
 import com.naengo.api_server.domain.recipe.entity.RecipeStatus;
-import com.naengo.api_server.global.dto.ApiResponse;
 import com.naengo.api_server.global.exception.CustomException;
 import com.naengo.api_server.global.exception.ErrorCode;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 관리자 — 제출 레시피 검토 / 단일 PATCH 수정·승인·반려.
+ *
+ * <p>api-3.json: {@code PATCH /api/v1/admin/pending-recipes/{id}}.
+ * list / detail GET 은 관리 콘솔 편의 확장 (api-3.json 외, 유지).
+ */
 @RestController
-@RequestMapping("/api/admin/pending-recipes")
+@RequestMapping("/api/v1/admin/pending-recipes")
 @RequiredArgsConstructor
 public class AdminRecipeController {
 
     private final AdminRecipeService adminRecipeService;
 
-    /** SPEC-20260504-01 — 검토 대기 목록 (status 필터, 기본 PENDING). */
+    /** 검토 목록 (status 필터, 기본 PENDING). */
     @GetMapping
-    public ResponseEntity<ApiResponse<AdminPendingRecipeListResponse>> list(
+    public AdminPendingRecipeListResponse list(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        RecipeStatus parsed = parseStatus(status);
-        return ResponseEntity.ok(ApiResponse.ok(adminRecipeService.list(parsed, page, size)));
+        return adminRecipeService.list(parseStatus(status), page, size);
     }
 
-    /** SPEC-20260504-01 — 단건 상세. */
+    /** 단건 상세. */
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<AdminPendingRecipeDetailResponse>> detail(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok(adminRecipeService.detail(id)));
+    public AdminPendingRecipeDetailResponse detail(@PathVariable Long id) {
+        return adminRecipeService.detail(id);
     }
 
-    /** SPEC-20260504-02 — 승인 → recipes 로 INSERT + pending status=APPROVED. */
-    @PostMapping("/{id}/approve")
-    public ResponseEntity<ApiResponse<RecipeApprovalResponse>> approve(
+    /** 단일 PATCH — 콘텐츠 수정 + 상태 전이(승인 승격/반려) 통합. */
+    @PatchMapping("/{id}")
+    public PendingRecipeResponse update(
             @PathVariable Long id,
-            @Valid @RequestBody(required = false) RecipeApprovalRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(adminRecipeService.approve(id, request)));
-    }
-
-    /** SPEC-20260504-02 — 반려 → pending status=REJECTED + 사유 기록. */
-    @PostMapping("/{id}/reject")
-    public ResponseEntity<ApiResponse<RecipeRejectionResponse>> reject(
-            @PathVariable Long id,
-            @Valid @RequestBody RecipeRejectionRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(adminRecipeService.reject(id, request)));
+            @Valid @RequestBody PendingRecipeAdminUpdateRequest request) {
+        return adminRecipeService.update(id, request);
     }
 
     private RecipeStatus parseStatus(String raw) {

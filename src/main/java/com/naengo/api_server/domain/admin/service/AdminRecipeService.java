@@ -3,16 +3,16 @@ package com.naengo.api_server.domain.admin.service;
 import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeDetailResponse;
 import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeListItemResponse;
 import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeListResponse;
-import com.naengo.api_server.domain.admin.dto.RecipeApprovalRequest;
-import com.naengo.api_server.domain.admin.dto.RecipeApprovalResponse;
-import com.naengo.api_server.domain.admin.dto.RecipeRejectionRequest;
-import com.naengo.api_server.domain.admin.dto.RecipeRejectionResponse;
+import com.naengo.api_server.domain.admin.dto.PendingRecipeAdminUpdateRequest;
+import com.naengo.api_server.domain.recipe.dto.PendingRecipeResponse;
+import com.naengo.api_server.domain.recipe.dto.RecipeListItemResponse;
 import com.naengo.api_server.domain.recipe.entity.PendingRecipe;
 import com.naengo.api_server.domain.recipe.entity.Recipe;
 import com.naengo.api_server.domain.recipe.entity.RecipeAuthorType;
 import com.naengo.api_server.domain.recipe.entity.RecipeStatus;
 import com.naengo.api_server.domain.recipe.repository.PendingRecipeRepository;
 import com.naengo.api_server.domain.recipe.repository.RecipeRepository;
+import com.naengo.api_server.domain.recipe.support.RecipeListMapper;
 import com.naengo.api_server.domain.user.entity.User;
 import com.naengo.api_server.domain.user.repository.UserRepository;
 import com.naengo.api_server.domain.user.support.AuthorDisplayName;
@@ -31,15 +31,16 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 관리자 — pending_recipes 검토 / 승인 / 반려.
+ * 관리자 — pending_recipes 검토 / 수정 / 승인·반려 (단일 PATCH), recipes video_url 조회.
  *
- * <p>승인 트랜잭션 (`docs/spec/admin-recipe-review.md §4-1`):
- * <ol>
- *   <li>pending 단건 조회. status=PENDING 이 아니면 409.</li>
- *   <li>recipes 의 NOT NULL 컬럼 누락 검증. 누락 시 422.</li>
- *   <li>recipes INSERT — author_type=USER, is_active=true. trigger_recipe_stats_create 가 stats(0,0) 자동 생성.</li>
- *   <li>pending UPDATE — status=APPROVED, admin_note, reviewed_at=NOW().</li>
- * </ol>
+ * <p>api-3.json `PATCH /api/v1/admin/pending-recipes/{id}` 정합:
+ * <ul>
+ *   <li>전달하지 않은 필드는 변경하지 않는다 (PATCH 시맨틱).</li>
+ *   <li>status 가 변경되면 reviewed_at = NOW.</li>
+ *   <li>status=APPROVED 전이 시 정식 {@code recipes} 로 승격 (트리거가 stats 자동 생성).</li>
+ *   <li>승인 필수 필드 부족 시 400 {@code PENDING_RECIPE_INCOMPLETE}.</li>
+ * </ul>
+ * <p>list / detail GET 은 api-3.json 외 우리 관리 콘솔 편의 확장 (유지).
  */
 @Service
 @RequiredArgsConstructor
@@ -50,6 +51,7 @@ public class AdminRecipeService {
     private final PendingRecipeRepository pendingRecipeRepository;
     private final RecipeRepository recipeRepository;
     private final UserRepository userRepository;
+    private final RecipeListMapper recipeListMapper;
 
     @Transactional(readOnly = true)
     public AdminPendingRecipeListResponse list(RecipeStatus status, int page, int size) {
@@ -117,16 +119,50 @@ public class AdminRecipeService {
         );
     }
 
+    /**
+     * 단일 PATCH — 콘텐츠 부분 수정 + 상태 전이(승인 승격/반려) 통합.
+     */
     @Transactional
-    public RecipeApprovalResponse approve(Long pendingRecipeId, RecipeApprovalRequest request) {
+    public PendingRecipeResponse update(Long pendingRecipeId, PendingRecipeAdminUpdateRequest req) {
         PendingRecipe p = pendingRecipeRepository.findById(pendingRecipeId)
                 .orElseThrow(() -> new CustomException(ErrorCode.PENDING_RECIPE_NOT_FOUND));
 
-        if (p.getStatus() != RecipeStatus.PENDING) {
-            throw new CustomException(ErrorCode.PENDING_RECIPE_NOT_REVIEWABLE);
-        }
-        ensureCompleteForApproval(p);
+        // 1) 콘텐츠 부분 수정 (null 은 보존)
+        p.applyAdminPatch(
+                req.title(), req.content(), req.description(),
+                req.ingredients(), req.ingredientsRaw(), req.instructions(),
+                req.servings(), req.cookingTime(), req.calories(), req.difficulty(),
+                req.category(), req.tags(), req.tips(),
+                req.videoUrl(), req.imageUrl());
 
+        // 2) 상태 전이
+        RecipeStatus newStatus = req.status();
+        boolean statusChanged = newStatus != null && newStatus != p.getStatus();
+        if (statusChanged) {
+            if (newStatus == RecipeStatus.APPROVED) {
+                ensureCompleteForApproval(p);   // 부족 시 400
+                promoteToRecipe(p);             // recipes INSERT (트리거가 stats 생성)
+            }
+            p.changeStatus(newStatus);          // status + reviewed_at = NOW
+        }
+
+        // 3) admin_note 는 상태 전이와 독립적으로 반영
+        p.setAdminNote(req.adminNote());
+
+        return PendingRecipeResponse.from(p);
+    }
+
+    /** video_url 로 정식 레시피 단건 조회 (등록 전 중복 확인). 없으면 404. */
+    @Transactional(readOnly = true)
+    public RecipeListItemResponse findByVideoUrl(String videoUrl) {
+        Recipe recipe = recipeRepository.findFirstByVideoUrlOrderByRecipeIdDesc(videoUrl)
+                .orElseThrow(() -> new CustomException(ErrorCode.RECIPE_NOT_FOUND));
+        return recipeListMapper.toItem(recipe, false, false);
+    }
+
+    // ─── 내부 ────────────────────────────────────────
+
+    private void promoteToRecipe(PendingRecipe p) {
         Recipe newRecipe = Recipe.builder()
                 .title(p.getTitle())
                 .description(p.getDescription())
@@ -147,41 +183,12 @@ public class AdminRecipeService {
                 .authorType(RecipeAuthorType.USER)
                 .authorId(p.getUserId())
                 .build();
-        Recipe saved = recipeRepository.save(newRecipe);
-
-        p.markApproved(request == null ? null : request.adminNote());
-
-        return new RecipeApprovalResponse(
-                p.getPendingRecipeId(),
-                saved.getRecipeId(),
-                p.getStatus(),
-                p.getReviewedAt()
-        );
+        recipeRepository.save(newRecipe);
     }
-
-    @Transactional
-    public RecipeRejectionResponse reject(Long pendingRecipeId, RecipeRejectionRequest request) {
-        PendingRecipe p = pendingRecipeRepository.findById(pendingRecipeId)
-                .orElseThrow(() -> new CustomException(ErrorCode.PENDING_RECIPE_NOT_FOUND));
-
-        if (p.getStatus() != RecipeStatus.PENDING) {
-            throw new CustomException(ErrorCode.PENDING_RECIPE_NOT_REVIEWABLE);
-        }
-
-        p.markRejected(request.reason());
-
-        return new RecipeRejectionResponse(
-                p.getPendingRecipeId(),
-                p.getStatus(),
-                p.getAdminNote(),
-                p.getReviewedAt()
-        );
-    }
-
-    // ─── 내부 ────────────────────────────────────────
 
     private void ensureCompleteForApproval(PendingRecipe p) {
-        if (isBlank(p.getDescription())
+        if (isBlank(p.getTitle())
+                || isBlank(p.getDescription())
                 || isEmpty(p.getIngredients())
                 || isBlank(p.getIngredientsRaw())
                 || isEmpty(p.getInstructions())

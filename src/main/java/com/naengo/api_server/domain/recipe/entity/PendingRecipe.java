@@ -118,4 +118,42 @@ public class PendingRecipe {
         this.adminNote = reason;
         this.reviewedAt = ZonedDateTime.now();
     }
+
+    /**
+     * 관리자 부분 수정 — null 인 인자는 기존 값 보존 (PATCH 시맨틱).
+     * 상태/검토시각은 별도 ({@link #markApproved}/{@link #markRejected}/{@link #touchReviewed}).
+     */
+    public void applyAdminPatch(String title, String content, String description,
+                                List<Ingredient> ingredients, String ingredientsRaw,
+                                List<String> instructions, BigDecimal servings,
+                                Integer cookingTime, Integer calories, String difficulty,
+                                List<String> category, List<String> tags, List<String> tips,
+                                String videoUrl, String imageUrl) {
+        if (title != null) this.title = title;
+        if (content != null) this.content = content;
+        if (description != null) this.description = description;
+        if (ingredients != null) this.ingredients = ingredients;
+        if (ingredientsRaw != null) this.ingredientsRaw = ingredientsRaw;
+        if (instructions != null) this.instructions = instructions;
+        if (servings != null) this.servings = servings;
+        if (cookingTime != null) this.cookingTime = cookingTime;
+        if (calories != null) this.calories = calories;
+        if (difficulty != null) this.difficulty = difficulty;
+        if (category != null) this.category = category;
+        if (tags != null) this.tags = tags;
+        if (tips != null) this.tips = tips;
+        if (videoUrl != null) this.videoUrl = videoUrl;
+        if (imageUrl != null) this.imageUrl = imageUrl;
+    }
+
+    /** status 전이 없이 admin_note 만 갱신. */
+    public void setAdminNote(String adminNote) {
+        if (adminNote != null) this.adminNote = adminNote;
+    }
+
+    /** status 변경 시 검토 시각 기록 (api-3.json: status 변경 → reviewed_at = NOW). */
+    public void changeStatus(RecipeStatus newStatus) {
+        this.status = newStatus;
+        this.reviewedAt = ZonedDateTime.now();
+    }
 }

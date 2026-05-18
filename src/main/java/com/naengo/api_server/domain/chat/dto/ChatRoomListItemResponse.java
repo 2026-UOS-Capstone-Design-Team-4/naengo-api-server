@@ -1,17 +1,18 @@
 package com.naengo.api_server.domain.chat.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.naengo.api_server.domain.chat.entity.ChatRoom;
 
 import java.time.ZonedDateTime;
 
 /**
- * AI 서버 OpenAPI 의 ChatRoomResponse 와 동일한 schema.
+ * 채팅방 한 행 — api-3.json {@code ChatRoomResponse} 정합 (snake_case).
  */
 public record ChatRoomListItemResponse(
-        Long roomId,
-        String title,
-        ZonedDateTime createdAt,
-        ZonedDateTime updatedAt
+        @JsonProperty("room_id") Long roomId,
+        @JsonProperty("title") String title,
+        @JsonProperty("created_at") ZonedDateTime createdAt,
+        @JsonProperty("updated_at") ZonedDateTime updatedAt
 ) {
     public static ChatRoomListItemResponse from(ChatRoom room) {
         return new ChatRoomListItemResponse(

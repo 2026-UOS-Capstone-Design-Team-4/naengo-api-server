@@ -2,6 +2,11 @@ spring:
   application:
     name: naengo-api-server
 
+  # 전 응답/요청 JSON 키를 snake_case 로 통일 (api-3.json 정합).
+  # 명시적 @JsonProperty 가 붙은 필드는 그 이름이 우선 (예: recipeId → "id").
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
   profiles:
     active: local   # 기본 local, 배포 시 SPRING_PROFILES_ACTIVE=prod 로 교체
 
@@ -55,8 +60,6 @@ oauth:
     user-info-url: https://kapi.kakao.com/v2/user/me
     token-url: https://kauth.kakao.com/oauth/token
     auth-url: https://kauth.kakao.com/oauth/authorize
-  google:
-    user-info-url: https://www.googleapis.com/oauth2/v3/userinfo
 
 # AWS S3 (이미지 업로드). 버킷/프리픽스가 비어있으면 업로드 엔드포인트는 503 반환.
 # 레시피 생성 API 의 `imageUrl` 프리픽스 검증도 이 값이 비어있으면 스킵 (로컬 개발용).

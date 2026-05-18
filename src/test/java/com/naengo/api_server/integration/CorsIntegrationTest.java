@@ -25,7 +25,7 @@ class CorsIntegrationTest extends IntegrationTestSupport {
     @DisplayName("preflight OPTIONS — 허용 origin → 200 + Access-Control-Allow-* 헤더")
     void preflightAllowed() {
         ResponseEntity<Void> response = client.method(HttpMethod.OPTIONS)
-                .uri("/api/auth/login")
+                .uri("/api/v1/auth/login")
                 .header(HttpHeaders.ORIGIN, ALLOWED_ORIGIN)
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Content-Type, Authorization")
@@ -44,7 +44,7 @@ class CorsIntegrationTest extends IntegrationTestSupport {
     @DisplayName("preflight — 허용되지 않은 origin → CORS 헤더 부재 (브라우저가 차단)")
     void preflightDisallowedOrigin() {
         ResponseEntity<Void> response = client.method(HttpMethod.OPTIONS)
-                .uri("/api/auth/login")
+                .uri("/api/v1/auth/login")
                 .header(HttpHeaders.ORIGIN, DISALLOWED_ORIGIN)
                 .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
                 .retrieve().toBodilessEntity();

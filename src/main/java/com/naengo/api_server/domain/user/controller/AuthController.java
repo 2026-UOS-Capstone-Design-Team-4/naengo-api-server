@@ -7,7 +7,6 @@ import com.naengo.api_server.domain.user.dto.SocialLoginRequest;
 import com.naengo.api_server.domain.user.service.AuthService;
 import com.naengo.api_server.domain.user.service.SocialAuthService;
 import com.naengo.api_server.global.auth.AuthCookieFactory;
-import com.naengo.api_server.global.dto.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -26,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
  * </ul>
  */
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -37,36 +36,29 @@ public class AuthController {
     // ─── 자체 회원가입 / 로그인 ───────────────────────────────────────────
 
     @PostMapping("/signup")
-    public ResponseEntity<ApiResponse<AuthResponse>> signUp(@Valid @RequestBody SignUpRequest request) {
+    public ResponseEntity<AuthResponse> signUp(@Valid @RequestBody SignUpRequest request) {
         AuthResponse response = authService.signUp(request);
         return withAuthCookie(HttpStatus.CREATED, response);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return withAuthCookie(HttpStatus.OK, response);
     }
 
     // ─── 소셜 로그인 ────────────────────────────────────────────────────
-    // 클라이언트가 카카오·구글에서 받은 액세스 토큰을 전달하면,
-    // 서버가 검증 후 자체 JWT를 발급한다.
+    // 클라이언트가 카카오에서 받은 액세스 토큰을 전달하면, 서버가 검증 후 자체 JWT를 발급한다.
 
     @PostMapping("/social/kakao")
-    public ResponseEntity<ApiResponse<AuthResponse>> kakaoLogin(@Valid @RequestBody SocialLoginRequest request) {
+    public ResponseEntity<AuthResponse> kakaoLogin(@Valid @RequestBody SocialLoginRequest request) {
         AuthResponse response = socialAuthService.kakaoLogin(request);
-        return withAuthCookie(HttpStatus.OK, response);
-    }
-
-    @PostMapping("/social/google")
-    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(@Valid @RequestBody SocialLoginRequest request) {
-        AuthResponse response = socialAuthService.googleLogin(request);
         return withAuthCookie(HttpStatus.OK, response);
     }
 
     /**
      * 로그아웃 — 쿠키 만료. stateless JWT 라 토큰 자체는 만료까지 유효 (블랙리스트 미적용).
-     * 쿠키 없이 호출해도 200 (멱등). 인증 없이도 호출 가능 (`/api/auth/**` 는 permitAll).
+     * 쿠키 없이 호출해도 204 (멱등). 인증 없이도 호출 가능.
      */
     @PostMapping("/logout")
     public ResponseEntity<Void> logout() {
@@ -76,10 +68,10 @@ public class AuthController {
                 .build();
     }
 
-    private ResponseEntity<ApiResponse<AuthResponse>> withAuthCookie(HttpStatus status, AuthResponse response) {
+    private ResponseEntity<AuthResponse> withAuthCookie(HttpStatus status, AuthResponse response) {
         ResponseCookie cookie = authCookieFactory.build(response.getAccessToken());
         return ResponseEntity.status(status)
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
-                .body(ApiResponse.ok(response));
+                .body(response);
     }
 }

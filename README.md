@@ -86,7 +86,7 @@ curl -s http://localhost:8080/health
 | `AWS_S3_BUCKET` | `""` | — | 비어있으면 업로드 endpoint 503 |
 | `AWS_S3_PUBLIC_URL_PREFIX` | `""` | — | 레시피 imageUrl 프리픽스 검증. 비어있으면 검증 스킵 |
 
-> **구글 OAuth 는 현재 미실현 상태**. 코드는 placeholder 로만 존재 — `SocialAuthService.googleLogin` 호출 시 동작 미검증. 운영에서는 비활성화 권장 (env 추가 X).
+> 소셜 로그인은 **카카오만** 지원. 구글 OAuth 관련 코드·env 는 2026-05-13 제거 (`docs/spec/user-domain-todo.md §1`).
 
 로컬에서 개인 override 를 쓰고 싶다면 `.env.local` 을 만들어 IDE Run Config 또는 쉘에서 로드한다. (`.gitignore` 에 `.env*` 포함)
 

@@ -8,7 +8,7 @@
 ALTER TABLE users
     ALTER COLUMN password_hash DROP NOT NULL;
 
--- 2. 소셜 로그인 제공자 컬럼 추가 (LOCAL / KAKAO / GOOGLE)
+-- 2. 소셜 로그인 제공자 컬럼 추가 (LOCAL / KAKAO)
 --    기존 사용자는 모두 LOCAL 처리
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS provider VARCHAR(20) NOT NULL DEFAULT 'LOCAL';

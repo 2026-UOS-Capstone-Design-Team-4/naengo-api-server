@@ -47,7 +47,7 @@ public class User {
     @Builder.Default
     private boolean isBlocked = false;
 
-    // 소셜 로그인 제공자 (LOCAL / KAKAO / GOOGLE)
+    // 소셜 로그인 제공자 (LOCAL / KAKAO)
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default

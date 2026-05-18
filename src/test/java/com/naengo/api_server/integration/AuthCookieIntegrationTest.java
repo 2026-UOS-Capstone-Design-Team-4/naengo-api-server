@@ -30,12 +30,19 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("signup → 201 + Set-Cookie(NAENGO_AT) + body.accessToken 동시")
     void signupReturnsBothCookieAndToken() {
-        ResponseEntity<String> response = postJson("/api/auth/signup", SIGNUP);
+        ResponseEntity<String> response = postJson("/api/v1/auth/signup", SIGNUP);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String body = Objects.requireNonNull(response.getBody());
-        String token = extractField(body, "accessToken");
+        String token = extractField(body, "access_token");
         assertThat(token).isNotBlank();
+
+        // §5-1 — 가입 즉시 user_profiles row 자동 생성
+        long userId = Long.parseLong(extractField(body, "user_id"));
+        Number profileCount = (Number) entityManager.createNativeQuery(
+                        "SELECT count(*) FROM user_profiles WHERE user_id = :id")
+                .setParameter("id", userId).getSingleResult();
+        assertThat(profileCount.longValue()).isEqualTo(1L);
 
         List<String> cookies = response.getHeaders().get(HttpHeaders.SET_COOKIE);
         assertThat(cookies).isNotNull().anySatisfy(c -> {
@@ -50,21 +57,21 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("login → 200 + Set-Cookie + body.accessToken 동시")
     void loginReturnsBothCookieAndToken() {
-        postJson("/api/auth/signup", SIGNUP);
+        postJson("/api/v1/auth/signup", SIGNUP);
 
-        ResponseEntity<String> response = postJson("/api/auth/login", LOGIN);
+        ResponseEntity<String> response = postJson("/api/v1/auth/login", LOGIN);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(extractField(response.getBody(), "accessToken")).isNotBlank();
+        assertThat(extractField(response.getBody(), "access_token")).isNotBlank();
         assertThat(response.getHeaders().get(HttpHeaders.SET_COOKIE)).isNotEmpty();
     }
 
     @Test
     @DisplayName("Authorization 헤더만 사용 → /api/users/me 200")
     void protectedEndpointWithHeaderOnly() {
-        String token = extractField(postJson("/api/auth/signup", SIGNUP).getBody(), "accessToken");
+        String token = extractField(postJson("/api/v1/auth/signup", SIGNUP).getBody(), "access_token");
 
-        ResponseEntity<String> response = client.get().uri("/api/users/me")
+        ResponseEntity<String> response = client.get().uri("/api/v1/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve().toEntity(String.class);
 
@@ -75,9 +82,9 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("쿠키만 사용 → /api/users/me 200")
     void protectedEndpointWithCookieOnly() {
-        String cookieHeader = extractCookieHeader(postJson("/api/auth/signup", SIGNUP));
+        String cookieHeader = extractCookieHeader(postJson("/api/v1/auth/signup", SIGNUP));
 
-        ResponseEntity<String> response = client.get().uri("/api/users/me")
+        ResponseEntity<String> response = client.get().uri("/api/v1/users/me")
                 .header(HttpHeaders.COOKIE, cookieHeader)
                 .retrieve().toEntity(String.class);
 
@@ -88,9 +95,9 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("헤더 + 쿠키 동시 → 헤더 우선 (200, 쿠키는 일부러 깨도 OK)")
     void protectedEndpointWithBoth() {
-        String token = extractField(postJson("/api/auth/signup", SIGNUP).getBody(), "accessToken");
+        String token = extractField(postJson("/api/v1/auth/signup", SIGNUP).getBody(), "access_token");
 
-        ResponseEntity<String> response = client.get().uri("/api/users/me")
+        ResponseEntity<String> response = client.get().uri("/api/v1/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .header(HttpHeaders.COOKIE, "NAENGO_AT=invalid-cookie-value")
                 .retrieve().toEntity(String.class);
@@ -99,20 +106,21 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("토큰 / 쿠키 둘 다 없음 → 401 + ApiResponse")
+    @DisplayName("토큰 / 쿠키 둘 다 없음 → 401 + ErrorResponse(UNAUTHENTICATED)")
     void protectedEndpointUnauthorized() {
-        ResponseEntity<String> response = client.get().uri("/api/users/me")
+        ResponseEntity<String> response = client.get().uri("/api/v1/users/me")
                 .retrieve().toEntity(String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(response.getBody()).contains("\"success\":false");
-        assertThat(response.getBody()).contains("로그인이 필요합니다");
+        assertThat(response.getBody())
+                .contains("\"code\":\"UNAUTHENTICATED\"")
+                .contains("로그인이 필요합니다");
     }
 
     @Test
     @DisplayName("logout → 204 + Set-Cookie Max-Age=0 (인증 없이도 멱등)")
     void logoutExpiresCookie() {
-        ResponseEntity<Void> response = client.post().uri("/api/auth/logout")
+        ResponseEntity<Void> response = client.post().uri("/api/v1/auth/logout")
                 .retrieve().toBodilessEntity();
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
@@ -126,9 +134,9 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("withdraw → 204 + Set-Cookie Max-Age=0 + 익명화. 이후 토큰 재사용 시 401")
     void withdrawExpiresCookieAndBlocksToken() {
-        String token = extractField(postJson("/api/auth/signup", SIGNUP).getBody(), "accessToken");
+        String token = extractField(postJson("/api/v1/auth/signup", SIGNUP).getBody(), "access_token");
 
-        ResponseEntity<Void> withdraw = client.delete().uri("/api/users/me")
+        ResponseEntity<Void> withdraw = client.delete().uri("/api/v1/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve().toBodilessEntity();
 
@@ -137,7 +145,7 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
                 .anyMatch(c -> c.contains("NAENGO_AT=;") && c.contains("Max-Age=0"));
 
         // 같은 토큰 재사용 → 401 (is_blocked + EntryPoint 협력)
-        ResponseEntity<String> reuse = client.get().uri("/api/users/me")
+        ResponseEntity<String> reuse = client.get().uri("/api/v1/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve().toEntity(String.class);
         assertThat(reuse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);

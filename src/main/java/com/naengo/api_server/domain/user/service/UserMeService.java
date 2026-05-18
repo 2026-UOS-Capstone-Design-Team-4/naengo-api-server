@@ -1,12 +1,15 @@
 package com.naengo.api_server.domain.user.service;
 
+import com.naengo.api_server.domain.chat.repository.ChatRoomRepository;
 import com.naengo.api_server.domain.like.repository.LikeRepository;
 import com.naengo.api_server.domain.recipe.repository.PendingRecipeRepository;
 import com.naengo.api_server.domain.scrap.repository.ScrapRepository;
 import com.naengo.api_server.domain.user.dto.PasswordChangeRequest;
+import com.naengo.api_server.domain.user.dto.UserInputUpdateRequest;
 import com.naengo.api_server.domain.user.dto.UserMeResponse;
 import com.naengo.api_server.domain.user.dto.UserPreferencesResponse;
 import com.naengo.api_server.domain.user.dto.UserPreferencesUpdateRequest;
+import com.naengo.api_server.domain.user.dto.UserProfileResponse;
 import com.naengo.api_server.domain.user.dto.UserUpdateRequest;
 import com.naengo.api_server.domain.user.entity.AuthProvider;
 import com.naengo.api_server.domain.user.entity.User;
@@ -21,6 +24,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 /**
  * 마이페이지 도메인 서비스: 본인 정보 조회 / 닉네임 수정 / 비밀번호 변경 /
  * 선호도(`user_profiles`) 조회·수정 / 회원 탈퇴(익명화).
@@ -31,7 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>{@code scraps} / {@code likes} 삭제 → DB 트리거가 recipe_stats 카운터 자동 감소</li>
  *   <li>{@code pending_recipes} / {@code user_profiles} 삭제 (PII 가능성)</li>
  *   <li>{@code recipes} 보존 (응답 시점에 닉네임 치환)</li>
- *   <li>{@code chat_*} 는 AI 서버 합의 전까지 보류</li>
+ *   <li>{@code chat_rooms} soft delete(`is_active=false`) — 우리 권한 내(PR-7/D-6) 무충돌.
+ *       {@code chat_messages} 본문 PII 스크럽/hard delete 는 AI 서버(메시지 primary writer)
+ *       합의 후 승격 (`docs/spec/user-domain-todo.md §6-2`)</li>
  * </ul>
  */
 @Service
@@ -43,6 +50,7 @@ public class UserMeService {
     private final LikeRepository likeRepository;
     private final ScrapRepository scrapRepository;
     private final PendingRecipeRepository pendingRecipeRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
 
@@ -80,7 +88,26 @@ public class UserMeService {
         user.changePasswordHash(passwordEncoder.encode(request.newPassword()));
     }
 
-    /** SPEC-20260504-04 — 선호도 조회. row 가 없으면 빈 default. */
+    /** api-3.json `GET /api/v1/users/me/profile` — user_input 만. row 없으면 빈 배열. */
+    @Transactional(readOnly = true)
+    public UserProfileResponse getProfile(Long userId) {
+        loadActiveUser(userId);
+        return userProfileRepository.findById(userId)
+                .map(p -> UserProfileResponse.of(p.getUserInput()))
+                .orElseGet(() -> UserProfileResponse.of(List.of()));
+    }
+
+    /** api-3.json `PATCH /api/v1/users/me/profile` — user_input 전체 교체. row 없으면 INSERT. */
+    @Transactional
+    public UserProfileResponse replaceUserInput(Long userId, UserInputUpdateRequest request) {
+        loadActiveUser(userId);
+        UserProfile profile = userProfileRepository.findById(userId)
+                .orElseGet(() -> userProfileRepository.save(UserProfile.empty(userId)));
+        profile.replaceUserInput(request.userInput());
+        return UserProfileResponse.of(profile.getUserInput());
+    }
+
+    /** 확장 — AI 분석 포함 선호도 조회 (`GET /api/v1/users/me/preferences`). row 없으면 빈 default. */
     @Transactional(readOnly = true)
     public UserPreferencesResponse getPreferences(Long userId) {
         loadActiveUser(userId);
@@ -120,7 +147,10 @@ public class UserMeService {
         pendingRecipeRepository.deleteAllByUserId(userId);
         userProfileRepository.deleteAllByUserId(userId);
 
-        // 2) users 행 익명화 — 같은 트랜잭션
+        // 2) 채팅방 soft delete (우리 권한 내, 무충돌). 메시지 본문 PII 스크럽은 AI 합의 후 승격.
+        chatRoomRepository.deactivateAllByUserId(userId);
+
+        // 3) users 행 익명화 — 같은 트랜잭션
         user.anonymize();
 
         // 트리거 / 익명화 모두 즉시 반영되도록 flush

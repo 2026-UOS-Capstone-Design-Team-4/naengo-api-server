@@ -9,14 +9,26 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+import java.util.Optional;
+
 public interface PendingRecipeRepository extends JpaRepository<PendingRecipe, Long> {
 
+    /** 본인 제출 목록 — is_active=true, 최신순. api-3.json `GET /api/v1/pending-recipes` (단순 배열). */
     @Query("""
            SELECT p FROM PendingRecipe p
            WHERE p.userId = :userId AND p.isActive = true
            ORDER BY p.createdAt DESC
            """)
-    Page<PendingRecipe> findActiveByUserOrderByLatest(@Param("userId") Long userId, Pageable pageable);
+    List<PendingRecipe> findActiveByUserOrderByLatest(@Param("userId") Long userId);
+
+    /** 본인 제출 단건 — is_active=true. 소유자 검증 포함. */
+    @Query("""
+           SELECT p FROM PendingRecipe p
+           WHERE p.pendingRecipeId = :id AND p.userId = :userId AND p.isActive = true
+           """)
+    Optional<PendingRecipe> findActiveByIdAndUser(@Param("id") Long id,
+                                                  @Param("userId") Long userId);
 
     @Modifying
     @Query("DELETE FROM PendingRecipe p WHERE p.userId = :userId")

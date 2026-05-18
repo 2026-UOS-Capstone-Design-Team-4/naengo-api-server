@@ -65,7 +65,7 @@ So that 보안을 유지하거나 잊은 비밀번호를 새 값으로 바꾼다
 
 ## 4. 비즈니스 규칙
 
-1. **provider 가 LOCAL 인 사용자만 호출 가능**. KAKAO/GOOGLE 사용자가 호출하면 403 `SOCIAL_PASSWORD_NOT_ALLOWED`.
+1. **provider 가 LOCAL 인 사용자만 호출 가능**. KAKAO 사용자가 호출하면 403 `SOCIAL_PASSWORD_NOT_ALLOWED`.
 2. `currentPassword` 검증을 가입 시와 동일한 `BCryptPasswordEncoder.matches` 로 수행. 불일치 시 401 `INVALID_CREDENTIALS` (이메일/비번 구분 안 함과 같은 보안 정책).
 3. `newPassword` 검증: `SignUpRequest` 와 동일한 규칙 — 8~64자, 영문+숫자 각 1자 이상.
 4. 같은 비밀번호로 변경 요청도 허용 (별도 검증 없음). 보안적으로 무의미하지만 차단할 강한 이유 없음.
@@ -113,7 +113,7 @@ So that 보안을 유지하거나 잊은 비밀번호를 새 값으로 바꾼다
 - [ ] currentPassword 불일치 → 401
 - [ ] newPassword 길이 7자 → 400 `INVALID_INPUT`
 - [ ] newPassword 영문만 / 숫자만 → 400
-- [ ] 소셜(KAKAO/GOOGLE) 사용자 호출 → 403 `SOCIAL_PASSWORD_NOT_ALLOWED`
+- [ ] 소셜(KAKAO) 사용자 호출 → 403 `SOCIAL_PASSWORD_NOT_ALLOWED`
 - [ ] 토큰 없이 → 401/403
 
 ---

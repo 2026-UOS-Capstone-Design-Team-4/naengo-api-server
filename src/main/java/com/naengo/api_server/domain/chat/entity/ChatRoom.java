@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 import java.time.ZonedDateTime;
 
 /**
- * 채팅방. AI 서버가 primary writer (생성·is_active 토글 등).
- * API 서버는 본 엔티티를 read-only 로만 사용 (Phase 0-2 합의).
+ * 채팅방. AI 서버가 생성·메시지 누적의 primary writer.
+ * API 서버는 SELECT + 사용자 요청 soft delete(`is_active=false`) 만 쓴다 (PR-7, D-6 합의안).
  */
 @Entity
 @Table(name = "chat_rooms")
@@ -36,4 +36,10 @@ public class ChatRoom {
 
     @Column(name = "updated_at")
     private ZonedDateTime updatedAt;
+
+    /** 사용자 숨김 처리 (soft delete). 실제 행은 보존. */
+    public void deactivate() {
+        this.isActive = false;
+        this.updatedAt = ZonedDateTime.now();
+    }
 }

@@ -1,6 +1,6 @@
 package com.naengo.api_server.global.auth;
 
-import com.naengo.api_server.global.dto.ApiResponse;
+import com.naengo.api_server.global.dto.ErrorResponse;
 import com.naengo.api_server.global.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -14,7 +14,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 인가 실패(=권한 부족 — 예: USER 가 ADMIN endpoint 호출) 시 403 + ApiResponse 일관 응답.
+ * 인가 실패(=권한 부족) 시 403 + 표준 ErrorResponse.
  */
 @Component
 public class JwtAccessDeniedHandler implements AccessDeniedHandler {
@@ -29,7 +29,9 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        ApiResponse<Void> body = ApiResponse.fail(ErrorCode.FORBIDDEN.getMessage());
+        ErrorResponse body = ErrorResponse.of(
+                ErrorCode.FORBIDDEN.getCode(),
+                ErrorCode.FORBIDDEN.getMessage());
         JSON.writeValue(response.getOutputStream(), body);
     }
 }

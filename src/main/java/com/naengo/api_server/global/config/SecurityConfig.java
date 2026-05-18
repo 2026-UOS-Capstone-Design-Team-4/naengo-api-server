@@ -41,21 +41,19 @@ public class SecurityConfig {
                 .sessionManagement(s -> s
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // JWT → 세션 사용 안 함
                 .exceptionHandling(eh -> eh
-                        .authenticationEntryPoint(jwtAuthenticationEntryPoint) // 미인증 → 401 + ApiResponse
-                        .accessDeniedHandler(jwtAccessDeniedHandler))          // 미인가 → 403 + ApiResponse
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint) // 미인증 → 401 + ErrorResponse
+                        .accessDeniedHandler(jwtAccessDeniedHandler))          // 미인가 → 403 + ErrorResponse
                 .authorizeHttpRequests(auth -> auth
 
                         // ── 인증 없이 접근 가능 ──────────────────────────
-                        .requestMatchers("/health").permitAll()                           // 헬스체크
-                        .requestMatchers("/api/auth/**").permitAll()                      // 회원가입, 로그인
-                        // `/api/recipes/my` 는 인증 필수 (아래 permitAll 규칙보다 먼저 매칭)
-                        .requestMatchers(HttpMethod.GET, "/api/recipes/my").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/recipes/**").permitAll()  // 레시피 조회(공개)
-                        .requestMatchers(HttpMethod.POST, "/api/chat/**").permitAll()    // 비로그인 채팅
-                        .requestMatchers("/oauth/**").permitAll()                         // 개발용 OAuth 콜백
+                        .requestMatchers("/health").permitAll()                              // 헬스체크
+                        .requestMatchers("/api/v1/auth/**").permitAll()                      // 회원가입, 로그인
+                        .requestMatchers(HttpMethod.GET, "/api/v1/recipes/**").permitAll()   // 공개 레시피 조회 (목록/단건)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/chat/**").permitAll()     // 비로그인 채팅
+                        .requestMatchers("/oauth/**").permitAll()                            // 개발용 OAuth 콜백
 
                         // ── 관리자 전용 ───────────────────────────────────
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 
                         // ── 그 외는 로그인 필요 ───────────────────────────
                         .anyRequest().authenticated())

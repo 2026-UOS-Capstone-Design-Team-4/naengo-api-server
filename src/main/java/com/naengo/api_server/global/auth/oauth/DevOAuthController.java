@@ -3,7 +3,6 @@ package com.naengo.api_server.global.auth.oauth;
 import com.naengo.api_server.domain.user.dto.AuthResponse;
 import com.naengo.api_server.domain.user.dto.SocialLoginRequest;
 import com.naengo.api_server.domain.user.service.SocialAuthService;
-import com.naengo.api_server.global.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -84,8 +83,7 @@ public class DevOAuthController {
      * GET http://localhost:8080/oauth/kakao/test-callback?code={인가코드}
      */
     @GetMapping("/oauth/kakao/test-callback")
-    public ResponseEntity<ApiResponse<AuthResponse>> kakaoCallback(
-            @RequestParam String code) {
+    public ResponseEntity<AuthResponse> kakaoCallback(@RequestParam String code) {
 
         log.info("[Dev] 카카오 인가 코드 수신: {}...", code.substring(0, Math.min(8, code.length())));
 
@@ -100,6 +98,6 @@ public class DevOAuthController {
         log.info("[Dev] 자체 JWT 발급 성공 — userId={}, nickname={}",
                 response.getUserId(), response.getNickname());
 
-        return ResponseEntity.ok(ApiResponse.ok(response));
+        return ResponseEntity.ok(response);
     }
 }

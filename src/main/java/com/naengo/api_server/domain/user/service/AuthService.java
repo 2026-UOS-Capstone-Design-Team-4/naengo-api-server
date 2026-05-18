@@ -4,6 +4,8 @@ import com.naengo.api_server.domain.user.dto.AuthResponse;
 import com.naengo.api_server.domain.user.dto.LoginRequest;
 import com.naengo.api_server.domain.user.dto.SignUpRequest;
 import com.naengo.api_server.domain.user.entity.User;
+import com.naengo.api_server.domain.user.entity.UserProfile;
+import com.naengo.api_server.domain.user.repository.UserProfileRepository;
 import com.naengo.api_server.domain.user.repository.UserRepository;
 import com.naengo.api_server.global.auth.JwtTokenProvider;
 import com.naengo.api_server.global.exception.CustomException;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final UserProfileRepository userProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
@@ -39,6 +42,9 @@ public class AuthService {
                 .build();
 
         User saved = userRepository.save(user);
+
+        // 마이페이지 진입 시 프로필 row 부재로 인한 비정상 흐름 방지 — 가입 즉시 빈 프로필 생성
+        userProfileRepository.save(UserProfile.empty(saved.getUserId()));
 
         String token = jwtTokenProvider.generateToken(saved.getUserId(), saved.getRole());
 
