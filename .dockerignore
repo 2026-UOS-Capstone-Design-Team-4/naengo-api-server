@@ -1,0 +1,28 @@
+# 빌드/IDE 산출물 — 이미지로 들어갈 이유 없음
+build/
+.gradle/
+.idea/
+.vscode/
+bin/
+out/
+*.iml
+.DS_Store
+
+# 비밀 — 절대 이미지 포함 금지
+.env
+.env.*
+!.env.example
+
+# Git / 문서 / 테스트 산출물
+.git/
+.gitignore
+.gitattributes
+docs/
+README.md
+HELP.md
+bootrun.log
+*.log
+
+# OS / 에디터 백업
+*~
+*.swp
