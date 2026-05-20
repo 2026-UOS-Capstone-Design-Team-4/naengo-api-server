@@ -35,8 +35,9 @@
 | A1 | `.env` DB_URL `jdbc:` 접두사 + `user:pass@` 제거 | ✅ | host 만 남김 (`jdbc:postgresql://<host>:5432/<db>?sslmode=verify-full&sslrootcert=/app/global-bundle.pem`) |
 | A2 | `KAKAO_REDIRECT_URI` 운영 도메인으로 교체 | ⏸ | 운영 도메인 결정 후. 카카오 콘솔 등록값과 1글자 일치 필수 |
 | A3 | `CORS_ALLOWED_ORIGINS=*` 좁히기 | ⏸ | front/admin 운영 도메인 확정 후. 현재 임시 wildcard |
-| A4 | Dockerfile 에 RDS CA 번들 다운로드 단계 추가 (SSL 옵션 A) | 🟡 | 진행 중 — builder apt curl + runtime COPY |
+| A4 | Dockerfile 에 RDS CA 번들 다운로드 단계 추가 (SSL 옵션 A) | ✅ | builder apt curl + runtime COPY. commit `1eaf4da` |
 | A5 | 빈 운영 env 채우기 (`AUTH_COOKIE_SAME_SITE`, `AWS_REGION`) | ⏸ | Secrets Manager 이관 단계와 함께 |
+| A6 | Spring Initializr 디폴트 정정 (`settings.gradle` rootProject.name, `build.gradle` group) | ✅ | `demo` → `naengo-api-server`, `com.example` → `com.naengo`. JAR 파일명 변경 — Dockerfile glob 안전 |
 
 ---
 
@@ -45,10 +46,12 @@
 | # | 항목 | 상태 | 메모 |
 |---|---|---|---|
 | B1 | ECR 리포 생성 | ✅ | Mutable / AES256 / Scan-on-push. URI 위 §0 참조 |
-| B2 | GitHub OIDC + IAM role + repo Secrets 3종 | 🟡 | CLI 명령 실행 완료. **1차 CI 실행 결과 확인 중** (https://github.com/2026-UOS-Capstone-Design-Team-4/naengo-api-server/actions) |
+| B2 | GitHub OIDC + IAM role + repo Secrets 3종 | 🟡 | 1차 CI test 30/30 PASS ✓ / build-and-push 가 OIDC AssumeRole 에서 실패 → **trust policy `sub` 가 placeholder `OWNER/REPO` 그대로였음**. 2026-05-21 `update-assume-role-policy` 로 실제 repo 경로(`repo:2026-UOS-Capstone-Design-Team-4/naengo-api-server:ref:refs/heads/main`) 로 정정. 워크플로 재실행 대기 |
 | B2-a | IAM identity provider (계정당 1회) | ✅ | `arn:aws:iam::518056141724:oidc-provider/token.actions.githubusercontent.com` |
-| B2-b | IAM role `github-actions-ecr-push` + trust + ecr-push policy | ✅ | trust = main 브랜치 only |
+| B2-b | IAM role `github-actions-ecr-push` + trust + ecr-push policy | ✅ | trust = main 브랜치 only. 2026-05-21 sub 정정 |
 | B2-c | GitHub Secrets (`AWS_ROLE_TO_ASSUME` / `AWS_REGION` / `ECR_REPOSITORY`) | ✅ | 콘솔로 주입 |
+| B2-d | CI test job 30/30 PASS | ✅ | run 26194902810 / 26195691470 둘 다 test job 성공 |
+| B2-e | CI build-and-push job → ECR 이미지 푸시 | 🟡 | trust 정정 후 재실행(attempt 2): OIDC ✓ / ECR login ✓ / Buildx ✓ / **Build and push 가 `useradd exit 4` 로 실패** — runtime base 가 UID 1000 점유. UID/GID 10001 로 정정 (Dockerfile 수정). 다음 push 로 재트리거 |
 | B3 | Secrets Manager 3종 생성 + ECS Execution Role 권한 | ⏸ | A4 Dockerfile 변경 + CI 정상 확인 후 |
 | B3-a | `naengo/prod/db` (DB_URL/DB_USERNAME/DB_PASSWORD) | ⏸ | DB_URL 은 `.env` 의 정정된 값 그대로 |
 | B3-b | `naengo/prod/jwt` (JWT_SECRET — AI 와 동일 값) | ⏸ | C3 합의 후 동일 값 |
@@ -87,14 +90,13 @@
 
 ## 현재 막힌 지점 / 다음 액션 (우선순위)
 
-1. **A4** Dockerfile 에 RDS CA 번들 추가 → commit + push (지금)
-2. **B2 검증** — 직전 push 의 CI 결과 (test 30/30 + ECR push) GitHub Actions 탭에서 확인
-3. **B7 / C0** — DB 운영 팀원과 V4/V5 적용 통지 + RDS 사전 점검 협의 (B3 이후 ECS 띄우기 전에 끝나야 함)
-4. **B3** — A4 + CI 정상 + C0 합의 후 Secrets Manager 3종 생성
-5. **B4~B8** — 그 후 순차
+1. **B2-e** — trust policy 정정 완료. 직전 실패 워크플로 **Re-run all jobs** 또는 빈 commit push 로 재트리거. ECR 에 `1eaf4da` + `latest` 태그 이미지 푸시되면 B2 완료
+2. **B7 / C0** — DB 운영 팀원과 V4/V5 적용 통지 + RDS 사전 점검 협의 (B3 이후 ECS 띄우기 전에 끝나야 함)
+3. **B3** — B2-e 통과 + C0 합의 후 Secrets Manager 3종 생성
+4. **B4~B8** — 그 후 순차
 
 > 운영 도메인이 정해지지 않은 상태에서도 B3/B4 까진 placeholder 로 진행 가능 (KAKAO_REDIRECT_URI 만 임시값). B5(ALB+Route53)는 도메인 필요.
 
 ## 변경 이력
 
-- 2026-05-21 신설. B1/B2 완료, A4 진행 중.
+- 2026-05-21 신설. B1 완료, A4 commit `1eaf4da`. B2 CI 1차 시도 — test ✓ / build-push 가 OIDC AssumeRole 실패(trust policy sub placeholder). trust 정정 후 재실행 attempt 2 — OIDC ✓ / build-push 가 `useradd exit 4` (UID 1000 충돌) 실패. Dockerfile UID/GID 10001 로 정정 + A6 Spring Initializr 디폴트 정정 동시 진행.
