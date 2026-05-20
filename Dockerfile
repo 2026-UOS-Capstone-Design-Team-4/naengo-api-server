@@ -43,9 +43,10 @@ RUN apt-get update \
 # ── Stage 2: runtime ─────────────────────────────────────────
 FROM eclipse-temurin:21-jre AS runtime
 
-# 비루트 실행 (보안 기본)
-RUN groupadd --system --gid 1000 naengo \
- && useradd --system --uid 1000 --gid 1000 --no-create-home --shell /usr/sbin/nologin naengo
+# 비루트 실행 (보안 기본). UID/GID 10001 사용 — eclipse-temurin:21-jre 이미지가
+# 1000 을 'ubuntu' 등 기본 사용자에 이미 할당해 useradd 가 exit 4(UID in use) 로 실패.
+RUN groupadd --gid 10001 naengo \
+ && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin naengo
 
 WORKDIR /app
 COPY --from=builder /workspace/app.jar /app/app.jar
