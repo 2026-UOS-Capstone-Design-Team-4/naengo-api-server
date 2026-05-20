@@ -31,6 +31,15 @@ COPY src ./src
 RUN ./gradlew --no-daemon bootJar -x test \
     && cp build/libs/*.jar app.jar
 
+# RDS CA 번들 다운로드 — DB_URL 의 sslmode=verify-full + sslrootcert=/app/global-bundle.pem 용.
+# 모든 리전 통합 번들 (https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html).
+# builder 단계에서만 curl 사용 — runtime 이미지엔 curl 안 들어감.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && curl -fsSL -o /workspace/global-bundle.pem \
+      https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+ && rm -rf /var/lib/apt/lists/*
+
 # ── Stage 2: runtime ─────────────────────────────────────────
 FROM eclipse-temurin:21-jre AS runtime
 
@@ -40,6 +49,7 @@ RUN groupadd --system --gid 1000 naengo \
 
 WORKDIR /app
 COPY --from=builder /workspace/app.jar /app/app.jar
+COPY --from=builder /workspace/global-bundle.pem /app/global-bundle.pem
 RUN chown -R naengo:naengo /app
 USER naengo:naengo
 
