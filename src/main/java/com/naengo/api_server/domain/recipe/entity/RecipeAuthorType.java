@@ -5,5 +5,6 @@ package com.naengo.api_server.domain.recipe.entity;
  */
 public enum RecipeAuthorType {
     ADMIN,
-    USER
+    USER,
+    SOURCE
 }

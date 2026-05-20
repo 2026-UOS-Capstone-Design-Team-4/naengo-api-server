@@ -8,12 +8,8 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 
 public interface RecipeRepository extends JpaRepository<Recipe, Long> {
-
-    /** video_url 로 단건 조회 (관리자 등록 전 중복 확인). 최신 등록 우선. */
-    Optional<Recipe> findFirstByVideoUrlOrderByRecipeIdDesc(String videoUrl);
 
     /**
      * 최신순 커서 페이지. cursor 는 마지막으로 받은 recipeId.

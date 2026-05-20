@@ -9,10 +9,16 @@ import com.naengo.api_server.domain.recipe.dto.RecipeListItemResponse;
 import com.naengo.api_server.domain.recipe.entity.PendingRecipe;
 import com.naengo.api_server.domain.recipe.entity.Recipe;
 import com.naengo.api_server.domain.recipe.entity.RecipeAuthorType;
+import com.naengo.api_server.domain.recipe.entity.RecipeIngredient;
+import com.naengo.api_server.domain.recipe.entity.RecipeLabel;
+import com.naengo.api_server.domain.recipe.entity.RecipeMedia;
 import com.naengo.api_server.domain.recipe.entity.RecipeStatus;
+import com.naengo.api_server.domain.recipe.entity.RecipeStep;
 import com.naengo.api_server.domain.recipe.repository.PendingRecipeRepository;
+import com.naengo.api_server.domain.recipe.repository.RecipeMediaRepository;
 import com.naengo.api_server.domain.recipe.repository.RecipeRepository;
 import com.naengo.api_server.domain.recipe.support.RecipeListMapper;
+import com.naengo.api_server.domain.recipe.support.RecipeNormalizer;
 import com.naengo.api_server.domain.user.entity.User;
 import com.naengo.api_server.domain.user.repository.UserRepository;
 import com.naengo.api_server.domain.user.support.AuthorDisplayName;
@@ -50,6 +56,7 @@ public class AdminRecipeService {
 
     private final PendingRecipeRepository pendingRecipeRepository;
     private final RecipeRepository recipeRepository;
+    private final RecipeMediaRepository recipeMediaRepository;
     private final UserRepository userRepository;
     private final RecipeListMapper recipeListMapper;
 
@@ -152,10 +159,12 @@ public class AdminRecipeService {
         return PendingRecipeResponse.from(p);
     }
 
-    /** video_url 로 정식 레시피 단건 조회 (등록 전 중복 확인). 없으면 404. */
+    /** video_url(recipe_media) 로 정식 레시피 단건 조회 (등록 전 중복 확인). 없으면 404. */
     @Transactional(readOnly = true)
     public RecipeListItemResponse findByVideoUrl(String videoUrl) {
-        Recipe recipe = recipeRepository.findFirstByVideoUrlOrderByRecipeIdDesc(videoUrl)
+        Recipe recipe = recipeMediaRepository
+                .findRecipesByVideoUrl(videoUrl, PageRequest.of(0, 1))
+                .stream().findFirst()
                 .orElseThrow(() -> new CustomException(ErrorCode.RECIPE_NOT_FOUND));
         return recipeListMapper.toItem(recipe, false, false);
     }
@@ -163,27 +172,35 @@ public class AdminRecipeService {
     // ─── 내부 ────────────────────────────────────────
 
     private void promoteToRecipe(PendingRecipe p) {
-        Recipe newRecipe = Recipe.builder()
+        Recipe recipe = Recipe.builder()
                 .title(p.getTitle())
                 .description(p.getDescription())
-                .ingredients(p.getIngredients())
-                .ingredientsRaw(p.getIngredientsRaw())
-                .instructions(p.getInstructions())
                 .servings(p.getServings())
-                .cookingTime(p.getCookingTime())
-                .calories(p.getCalories())
+                .cookingTimeMinutes(p.getCookingTime())
+                .kcalPerServing(p.getCalories())
                 .difficulty(p.getDifficulty())
-                .category(p.getCategory())
-                .tags(p.getTags() != null ? p.getTags() : List.of())
-                .tips(p.getTips() != null ? p.getTips() : List.of())
-                .content(p.getContent())
-                .videoUrl(p.getVideoUrl())
-                .imageUrl(p.getImageUrl())
+                .visibility("PUBLIC")
                 .isActive(true)
                 .authorType(RecipeAuthorType.USER)
                 .authorId(p.getUserId())
+                .classificationStatus("NOT_CLASSIFIED")
                 .build();
-        recipeRepository.save(newRecipe);
+
+        for (RecipeIngredient i : RecipeNormalizer.toIngredientRows(p.getIngredients())) {
+            recipe.addIngredient(i);
+        }
+        for (RecipeStep s : RecipeNormalizer.toStepRows(p.getInstructions())) {
+            recipe.addStep(s);
+        }
+        for (RecipeLabel l : RecipeNormalizer.toLabelRows(p.getCategory(), p.getTags(), p.getTips())) {
+            recipe.addLabel(l);
+        }
+        for (RecipeMedia m : RecipeNormalizer.toMediaRows(p.getImageUrl(), p.getVideoUrl())) {
+            recipe.addMedia(m);
+        }
+
+        Recipe saved = recipeRepository.save(recipe);
+        p.markImported(saved.getRecipeId());
     }
 
     private void ensureCompleteForApproval(PendingRecipe p) {

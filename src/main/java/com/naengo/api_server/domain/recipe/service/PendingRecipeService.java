@@ -3,6 +3,7 @@ package com.naengo.api_server.domain.recipe.service;
 import com.naengo.api_server.domain.recipe.dto.PendingRecipeCreateRequest;
 import com.naengo.api_server.domain.recipe.dto.PendingRecipeResponse;
 import com.naengo.api_server.domain.recipe.entity.PendingRecipe;
+import com.naengo.api_server.domain.recipe.entity.RecipeDraft;
 import com.naengo.api_server.domain.recipe.repository.PendingRecipeRepository;
 import com.naengo.api_server.global.exception.CustomException;
 import com.naengo.api_server.global.exception.ErrorCode;
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,23 +34,28 @@ public class PendingRecipeService {
     public PendingRecipeResponse create(Long userId, PendingRecipeCreateRequest request) {
         validateImageUrl(request.imageUrl());
 
+        RecipeDraft draft = RecipeDraft.builder()
+                .description(request.description())
+                .ingredients(orEmpty(request.ingredients()))
+                .ingredientsRaw(rawToList(request.ingredientsRaw()))
+                .instructions(orEmpty(request.instructions()))
+                .servings(request.servings())
+                .cookingTimeMinutes(request.cookingTime())
+                .kcalPerServing(request.calories())
+                .difficulty(request.difficulty())
+                .category(orEmpty(request.category()))
+                .tags(orEmpty(request.tags()))
+                .tips(orEmpty(request.tips()))
+                .videoUrl(request.videoUrl())
+                .imageUrl(request.imageUrl())
+                .build();
+
         PendingRecipe pending = PendingRecipe.builder()
                 .userId(userId)
                 .title(request.title())
-                .description(request.description())
-                .content(request.content())
-                .ingredients(request.ingredients())
-                .ingredientsRaw(request.ingredientsRaw())
-                .instructions(request.instructions())
-                .servings(request.servings())
-                .cookingTime(request.cookingTime())
-                .calories(request.calories())
-                .difficulty(request.difficulty())
-                .category(request.category())
-                .tags(request.tags())
-                .tips(request.tips())
-                .videoUrl(request.videoUrl())
-                .imageUrl(request.imageUrl())
+                .submissionText(request.content())
+                .draftPayload(draft)
+                .aiSuggestedPatch(RecipeDraft.empty())
                 .build();
 
         return PendingRecipeResponse.from(pendingRecipeRepository.save(pending));
@@ -84,6 +91,15 @@ public class PendingRecipeService {
     }
 
     // ─── 내부 ─────────────────────────────────────────────
+
+    private <T> List<T> orEmpty(List<T> list) {
+        return list == null ? new ArrayList<>() : new ArrayList<>(list);
+    }
+
+    private List<String> rawToList(String raw) {
+        if (raw == null || raw.isBlank()) return new ArrayList<>();
+        return new ArrayList<>(List.of(raw));
+    }
 
     private void validateImageUrl(String imageUrl) {
         if (imageUrl == null || imageUrl.isBlank()) return;

@@ -74,7 +74,7 @@ public class UserProfile {
     @Column(name = "cooking_skill", length = 10)
     private String cookingSkill;
 
-    @Column(name = "preferred_cooking_time")
+    @Column(name = "preferred_cooking_time_minutes")
     private Integer preferredCookingTime;
 
     @Column(name = "serving_size", precision = 4, scale = 1)

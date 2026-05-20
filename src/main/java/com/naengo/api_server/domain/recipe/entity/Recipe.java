@@ -6,16 +6,19 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 승인된 레시피 (관리자가 게시 결정한 것). 사용자 제출 레시피는 PendingRecipe 에 별도 존재.
- * AI 서버 OpenAPI 의 RecipeResponse 와 1:1 매핑.
+ * 승인된 레시피 (정규화 코어). 재료/조리/라벨/미디어는 분리 테이블로 정규화되며
+ * 클라이언트 응답(api-3.json RecipeResponse) 은 매퍼가 평면으로 조립한다.
+ *
+ * <p>recipe_stats / recipe_classifications / recipe_quality_scores 1:1 행은
+ * DB 트리거(trigger_create_recipe_dependents)가 INSERT 시 자동 생성하므로
+ * 애플리케이션에서 cascade 하지 않는다.
  */
 @Entity
 @Table(name = "recipes")
@@ -30,62 +33,35 @@ public class Recipe {
     @Column(name = "recipe_id")
     private Long recipeId;
 
+    @Column(name = "source_id")
+    private Long sourceId;
+
     @Column(nullable = false, length = 255)
     private String title;
+
+    @Column(columnDefinition = "TEXT")
+    private String summary;
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String description;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
-    private List<Ingredient> ingredients;
-
-    @Column(name = "ingredients_raw", columnDefinition = "TEXT", nullable = false)
-    private String ingredientsRaw;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
-    private List<String> instructions;
-
     @Column(nullable = false, precision = 4, scale = 1)
     private BigDecimal servings;
 
-    @Column(name = "cooking_time", nullable = false)
-    private Integer cookingTime;
+    @Column(name = "cooking_time_minutes", nullable = false)
+    private Integer cookingTimeMinutes;
 
-    @Column
-    private Integer calories;
+    @Column(name = "kcal_per_serving")
+    private Integer kcalPerServing;
 
-    /** "easy" / "normal" / "hard" — V1 CHECK 제약 참조 */
+    /** "easy" / "normal" / "hard" — V4 CHECK 제약 참조 */
     @Column(nullable = false, length = 10)
     private String difficulty;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
-    private List<String> category;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
+    /** "PUBLIC" / "ADMIN_ONLY" */
+    @Column(nullable = false, length = 20)
     @Builder.Default
-    private List<String> tags = List.of();
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
-    @Builder.Default
-    private List<String> tips = List.of();
-
-    @Column(columnDefinition = "TEXT")
-    private String content;
-
-    @Column(name = "video_url", length = 512)
-    private String videoUrl;
-
-    @Column(name = "image_url", length = 512)
-    private String imageUrl;
-
-    @Column(name = "is_active", nullable = false)
-    @Builder.Default
-    private boolean isActive = true;
+    private String visibility = "PUBLIC";
 
     @Enumerated(EnumType.STRING)
     @Column(name = "author_type", nullable = false, length = 20)
@@ -95,16 +71,70 @@ public class Recipe {
     @Column(name = "author_id")
     private Long authorId;
 
+    /** "NOT_CLASSIFIED" / "CLASSIFIED" / "FAILED" / "REVIEW_REQUIRED" */
+    @Column(name = "classification_status", nullable = false, length = 30)
+    @Builder.Default
+    private String classificationStatus = "NOT_CLASSIFIED";
+
+    @Column(name = "classified_at")
+    private ZonedDateTime classifiedAt;
+
+    @Column(name = "is_active", nullable = false)
+    @Builder.Default
+    private boolean isActive = true;
+
     @Column(name = "created_at", updatable = false)
     @Builder.Default
     private ZonedDateTime createdAt = ZonedDateTime.now();
 
-    // recipes.embedding 은 AI 서버가 관리. 엔티티에 매핑하지 않음 (validate 는 missing-from-entity 컬럼은 문제삼지 않음).
+    @Column(name = "updated_at")
+    @Builder.Default
+    private ZonedDateTime updatedAt = ZonedDateTime.now();
+
+    @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC, ingredientId ASC")
+    @Builder.Default
+    private List<RecipeIngredient> ingredients = new ArrayList<>();
+
+    @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("stepNo ASC")
+    @Builder.Default
+    private List<RecipeStep> steps = new ArrayList<>();
+
+    @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC, labelId ASC")
+    @Builder.Default
+    private List<RecipeLabel> labels = new ArrayList<>();
+
+    @OneToMany(mappedBy = "recipe", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("isPrimary DESC, sortOrder ASC, mediaId ASC")
+    @Builder.Default
+    private List<RecipeMedia> media = new ArrayList<>();
 
     @OneToOne(mappedBy = "recipe", fetch = FetchType.LAZY)
     private RecipeStats stats;
 
     public void deactivate() {
         this.isActive = false;
+    }
+
+    public void addIngredient(RecipeIngredient i) {
+        i.assignRecipe(this);
+        this.ingredients.add(i);
+    }
+
+    public void addStep(RecipeStep s) {
+        s.assignRecipe(this);
+        this.steps.add(s);
+    }
+
+    public void addLabel(RecipeLabel l) {
+        l.assignRecipe(this);
+        this.labels.add(l);
+    }
+
+    public void addMedia(RecipeMedia m) {
+        m.assignRecipe(this);
+        this.media.add(m);
     }
 }

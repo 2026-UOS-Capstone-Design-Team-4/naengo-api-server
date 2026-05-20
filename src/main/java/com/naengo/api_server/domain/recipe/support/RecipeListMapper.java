@@ -2,12 +2,21 @@ package com.naengo.api_server.domain.recipe.support;
 
 import com.naengo.api_server.domain.recipe.dto.RecipeListItemResponse;
 import com.naengo.api_server.domain.recipe.entity.Recipe;
+import com.naengo.api_server.domain.recipe.entity.RecipeIngredient;
+import com.naengo.api_server.domain.recipe.entity.RecipeLabel;
+import com.naengo.api_server.domain.recipe.entity.RecipeMedia;
 import com.naengo.api_server.domain.recipe.entity.RecipeStats;
+import com.naengo.api_server.domain.recipe.entity.RecipeStep;
+import com.naengo.api_server.domain.recipe.repository.RecipeIngredientRepository;
+import com.naengo.api_server.domain.recipe.repository.RecipeLabelRepository;
+import com.naengo.api_server.domain.recipe.repository.RecipeMediaRepository;
+import com.naengo.api_server.domain.recipe.repository.RecipeStepRepository;
 import com.naengo.api_server.domain.user.repository.UserRepository;
 import com.naengo.api_server.domain.user.support.AuthorDisplayName;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,16 +24,22 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Recipe → RecipeListItemResponse 매핑 (api-3.json 정합 — 전체 레시피 필드 + engagement).
+ * Recipe(정규화) → RecipeListItemResponse(api-3.json 평면) 매핑.
  *
- * <p>작성자 닉네임은 일괄 조회로 N+1 방지. {@code is_liked}/{@code is_scrapped} 는
- * 호출부가 현재 사용자 기준으로 미리 계산한 id 집합을 넘긴다 (비로그인이면 빈 집합).
+ * <p>재료/조리/라벨/미디어는 분리 테이블이라 페이지 단위로 일괄 조회 후
+ * recipeId 로 그룹핑하여 평면 조립한다 (N+1 / bag fetch 회피).
+ * {@code is_liked}/{@code is_scrapped} 는 호출부가 현재 사용자 기준으로
+ * 미리 계산한 id 집합을 넘긴다 (비로그인이면 빈 집합).
  */
 @Component
 @RequiredArgsConstructor
 public class RecipeListMapper {
 
     private final UserRepository userRepository;
+    private final RecipeIngredientRepository ingredientRepository;
+    private final RecipeStepRepository stepRepository;
+    private final RecipeLabelRepository labelRepository;
+    private final RecipeMediaRepository mediaRepository;
 
     /** 사용자 컨텍스트 없음 (ChatService 등). engagement flag 는 모두 false. */
     public List<RecipeListItemResponse> toItems(List<Recipe> recipes) {
@@ -37,17 +52,22 @@ public class RecipeListMapper {
                                                 Set<Long> scrappedIds) {
         if (recipes.isEmpty()) return List.of();
 
+        List<Long> recipeIds = recipes.stream().map(Recipe::getRecipeId).toList();
         Map<Long, String> nicknameMap = loadNicknames(recipes);
+        Children c = loadChildren(recipeIds);
 
-        return recipes.stream()
-                .map(r -> toItem(r, nicknameMap, likedIds, scrappedIds))
-                .toList();
+        List<RecipeListItemResponse> out = new ArrayList<>(recipes.size());
+        for (Recipe r : recipes) {
+            out.add(toItem(r, nicknameMap, c, likedIds, scrappedIds));
+        }
+        return out;
     }
 
-    /** 단건 매핑 (RecipeService.detail). */
+    /** 단건 매핑 (RecipeService.detail / AdminRecipeService.findByVideoUrl). */
     public RecipeListItemResponse toItem(Recipe r, boolean liked, boolean scrapped) {
         Map<Long, String> nicknameMap = loadNicknames(List.of(r));
-        return toItem(r, nicknameMap,
+        Children c = loadChildren(List.of(r.getRecipeId()));
+        return toItem(r, nicknameMap, c,
                 liked ? Set.of(r.getRecipeId()) : Set.of(),
                 scrapped ? Set.of(r.getRecipeId()) : Set.of());
     }
@@ -56,36 +76,68 @@ public class RecipeListMapper {
 
     private RecipeListItemResponse toItem(Recipe r,
                                           Map<Long, String> nicknameMap,
+                                          Children c,
                                           Set<Long> likedIds,
                                           Set<Long> scrappedIds) {
+        Long id = r.getRecipeId();
         RecipeStats s = r.getStats();
         int likes = s == null ? 0 : s.getLikesCount();
         int scraps = s == null ? 0 : s.getScrapCount();
         String rawNickname = r.getAuthorId() == null ? null : nicknameMap.get(r.getAuthorId());
+
+        List<RecipeIngredient> ings = c.ingredients.getOrDefault(id, List.of());
+        List<RecipeStep> steps = c.steps.getOrDefault(id, List.of());
+        List<RecipeLabel> labels = c.labels.getOrDefault(id, List.of());
+        List<RecipeMedia> media = c.media.getOrDefault(id, List.of());
+
         return new RecipeListItemResponse(
-                r.getRecipeId(),
+                id,
                 r.getTitle(),
                 r.getDescription(),
-                r.getIngredients(),
-                r.getIngredientsRaw(),
-                r.getInstructions(),
+                RecipeNormalizer.toIngredientDtos(ings),
+                RecipeNormalizer.toIngredientsRaw(ings),
+                RecipeNormalizer.toInstructions(steps),
                 r.getServings(),
-                r.getCookingTime(),
-                r.getCalories(),
+                r.getCookingTimeMinutes(),
+                r.getKcalPerServing(),
                 r.getDifficulty(),
-                r.getCategory(),
-                r.getTags(),
-                r.getTips(),
-                r.getVideoUrl(),
-                r.getImageUrl(),
+                RecipeNormalizer.labelValues(labels, RecipeLabel.TYPE_CATEGORY),
+                RecipeNormalizer.labelValues(labels, RecipeLabel.TYPE_TAG),
+                RecipeNormalizer.labelValues(labels, RecipeLabel.TYPE_TIP),
+                RecipeNormalizer.videoUrl(media),
+                RecipeNormalizer.primaryImageUrl(media),
                 r.getAuthorType(),
                 AuthorDisplayName.of(rawNickname),
                 r.getCreatedAt(),
                 likes,
                 scraps,
-                likedIds.contains(r.getRecipeId()),
-                scrappedIds.contains(r.getRecipeId())
+                likedIds.contains(id),
+                scrappedIds.contains(id)
         );
+    }
+
+    private Children loadChildren(List<Long> recipeIds) {
+        if (recipeIds.isEmpty()) {
+            return new Children(Map.of(), Map.of(), Map.of(), Map.of());
+        }
+        return new Children(
+                groupByRecipe(ingredientRepository.findByRecipeIds(recipeIds),
+                        i -> i.getRecipe().getRecipeId()),
+                groupByRecipe(stepRepository.findByRecipeIds(recipeIds),
+                        st -> st.getRecipe().getRecipeId()),
+                groupByRecipe(labelRepository.findByRecipeIds(recipeIds),
+                        l -> l.getRecipe().getRecipeId()),
+                groupByRecipe(mediaRepository.findByRecipeIds(recipeIds),
+                        m -> m.getRecipe().getRecipeId()));
+    }
+
+    private <T> Map<Long, List<T>> groupByRecipe(List<T> rows,
+                                                 java.util.function.Function<T, Long> keyFn) {
+        Map<Long, List<T>> map = new HashMap<>();
+        for (T row : rows) {
+            map.computeIfAbsent(keyFn.apply(row), k -> new ArrayList<>()).add(row);
+        }
+        return map;
     }
 
     private Map<Long, String> loadNicknames(List<Recipe> recipes) {
@@ -100,5 +152,11 @@ public class RecipeListMapper {
                     .forEach(u -> nicknameMap.put(u.getUserId(), u.getNickname()));
         }
         return nicknameMap;
+    }
+
+    private record Children(Map<Long, List<RecipeIngredient>> ingredients,
+                            Map<Long, List<RecipeStep>> steps,
+                            Map<Long, List<RecipeLabel>> labels,
+                            Map<Long, List<RecipeMedia>> media) {
     }
 }
