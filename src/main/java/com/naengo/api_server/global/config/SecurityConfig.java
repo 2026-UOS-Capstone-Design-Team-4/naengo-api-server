@@ -46,7 +46,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
 
                         // ── 인증 없이 접근 가능 ──────────────────────────
-                        .requestMatchers("/health").permitAll()                              // 헬스체크
+                        .requestMatchers("/", "/health").permitAll()                         // 헬스체크 (LB target group / api-3.json PR-8)
                         .requestMatchers("/api/v1/auth/**").permitAll()                      // 회원가입, 로그인
                         .requestMatchers(HttpMethod.GET, "/api/v1/recipes/**").permitAll()   // 공개 레시피 조회 (목록/단건)
                         .requestMatchers(HttpMethod.POST, "/api/v1/chat/**").permitAll()     // 비로그인 채팅
@@ -69,13 +69,15 @@ public class SecurityConfig {
 
     /**
      * CORS 설정. {@code allowCredentials=true} 가 고정 정책 (쿠키 인증 통로 호환).
-     * 따라서 origin 와일드카드 사용 불가 → `cors.allowed-origins` 에 명시적 목록 주입.
-     * 응답에 {@code Set-Cookie} 가 노출되도록 exposed-headers 에 포함.
+     * {@code setAllowedOriginPatterns} 를 사용 — 와일드카드(`*`/`https://*.example.com`) 가
+     * credentials=true 와 공존 가능. 매칭되면 응답 {@code Access-Control-Allow-Origin}
+     * 헤더에 요청 Origin 을 그대로 반사한다. 응답에 {@code Set-Cookie} 가
+     * 노출되도록 exposed-headers 에 포함.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cors = new CorsConfiguration();
-        cors.setAllowedOrigins(corsProperties.allowedOrigins());
+        cors.setAllowedOriginPatterns(corsProperties.allowedOrigins());
         cors.setAllowedMethods(corsProperties.allowedMethods());
         cors.setAllowedHeaders(corsProperties.allowedHeaders());
         cors.setExposedHeaders(corsProperties.exposedHeaders());
