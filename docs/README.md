@@ -15,11 +15,11 @@ API 서버는 앱(프론트) 과 1차로 마주하는 백엔드다. 책임은 (1
 
 | 영역 | 상태 |
 |---|---|
-| DB 마이그레이션 | V1+V2+V3 운영 가능. 추가 V4 미예정 ([§3](#3-db-스키마)). |
+| DB 마이그레이션 | V1+V2+V3 + **V4 (2026-05-19, 레시피 정규화 옵션 B)** + **V5 (2026-05-19, users/social_accounts 분리)** ([§3](#3-db-스키마), [B 메모](changes/2026-05-19-option-b-normalization.md), [V5 메모](changes/2026-05-19-v5-split-social-accounts.md)). |
 | 인증 | 자체 회원가입 / 로그인 / **카카오 소셜** / 쿠키 + JWT dual. **구글은 미지원** (2026-05-13 제거 완료). |
 | 도메인 구현 | User / Recipe / Pending / Like / Scrap / Chat / Admin 모두 1차 완료. **api-3.json 정합 작업 진행 중** — PR-1~PR-7 완료 + User 인증 마무리 + 전역 snake_case 적용. PR-8(AI 협의 + 헬스체크 `GET /`) 남음 ([§4](#4-앞으로-할-일)). |
 | 응답 규약 | 성공 = raw JSON (래퍼 없음). 실패 = `{"error":{"code","message","details"}}`. **전 요청·응답 JSON 키 snake_case** (Jackson `SNAKE_CASE`, 2026-05-17). |
-| 클라이언트 | naengo-front (Flutter), naengo-admin (React) 가 모두 `/api/v1/...` prefix 를 기대. api-server 도 `/api/v1/...` 로 통일됨 (PR-1). |
+| 클라이언트 | naengo-front (Flutter) 는 api-server `/api/v1/...` 기대. **naengo-admin (React) 는 2026-05-18 스냅샷부터 api-server 를 호출하지 않고 naengo-ai(:8000) 직결** ([`changes/2026-05-19-ai-admin-snapshot-delta.md`](changes/2026-05-19-ai-admin-snapshot-delta.md)). |
 | 테스트 | Testcontainers 기반 통합 테스트 **30건 PASS** (Auth 8 / Cors 4 / ProfileChat 3 / Recipe 6 / RequestId 4 / SocialAuth 5). |
 | 인프라 | 로컬 docker-compose. AWS RDS / S3 / 배포는 팀원 담당, 미완료. |
 
@@ -72,6 +72,8 @@ API 서버는 앱(프론트) 과 1차로 마주하는 백엔드다. 책임은 (1
 
 - [`spec/api3-alignment-and-integration.md`](spec/api3-alignment-and-integration.md) — **다음 8개 PR 의 입력**. 우선순위는 §6.
 - [`spec/user-domain-todo.md`](spec/user-domain-todo.md) — **User 도메인 (로그인 + 카카오 소셜) TODO 리스트 (2026-05-13)**. 본 README 와 같이 발행.
+- [`changes/2026-05-17-api4-dbv3-delta.md`](changes/2026-05-17-api4-dbv3-delta.md) — api-4/DBv3/front 변경점 분석. **레시피 정규화 채택(A/B) 의사결정 안건 — 미해결.**
+- [`changes/2026-05-19-ai-admin-snapshot-delta.md`](changes/2026-05-19-ai-admin-snapshot-delta.md) — **ai/admin 신규 스냅샷 분석. admin→AI 직결 전환 + `users` 소유권 회귀(AI 팀 에스컬레이션 필요).**
 
 ### 2.6 템플릿
 
