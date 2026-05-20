@@ -5,14 +5,15 @@ import lombok.*;
 
 import java.time.ZonedDateTime;
 
+/**
+ * 회원 메인 테이블 (V5 이후).
+ *
+ * <p>소셜 제공자 식별자(provider / provider_user_id) 는 V5 부터 {@link SocialAccount} 로 분리.
+ * users 는 LOCAL / 소셜 가입자 공통 정보만 보유. 소셜 가입자는 {@code password_hash = null}
+ * 이며 social_accounts 에 1행 link, LOCAL 가입자는 password_hash 보유 + social_accounts 미연결.
+ */
 @Entity
-@Table(
-        name = "users",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uq_provider_provider_id",
-                columnNames = {"provider", "provider_id"}
-        )
-)
+@Table(name = "users")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Builder
@@ -47,16 +48,6 @@ public class User {
     @Builder.Default
     private boolean isBlocked = false;
 
-    // 소셜 로그인 제공자 (LOCAL / KAKAO)
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    @Builder.Default
-    private AuthProvider provider = AuthProvider.LOCAL;
-
-    // 소셜 제공자에서 발급한 사용자 고유 ID
-    @Column(name = "provider_id", length = 255)
-    private String providerId;
-
     @Column(name = "created_at", updatable = false)
     @Builder.Default
     private ZonedDateTime createdAt = ZonedDateTime.now();
@@ -87,13 +78,13 @@ public class User {
 
     /**
      * 회원 탈퇴 익명화 — PII nullify + 닉네임 꼬리표 + flag 토글 + deleted_at.
-     * `users` 행 자체는 보존 (recipes.author_id 정합 유지).
+     * {@code users} 행 자체는 보존 (recipes.author_id 정합 유지).
+     * 소셜 link 제거는 서비스 단에서 {@code social_accounts} 별도 삭제.
      * 호출 시점에 이미 탈퇴된 경우는 서비스 단에서 미리 거부할 것.
      */
     public void anonymize() {
         this.email = null;
         this.passwordHash = null;
-        this.providerId = null;
         this.nickname = "탈퇴한 사용자_" + this.userId;
         this.isBlocked = true;
         this.isActive = false;

@@ -14,13 +14,17 @@ public record UserMeResponse(
         boolean isActive,
         ZonedDateTime createdAt
 ) {
-    public static UserMeResponse from(User user) {
+    /**
+     * V5 분리 이후 — provider 는 더 이상 users 컬럼이 아니므로 외부에서 계산해 주입.
+     * 호출부(UserMeService) 가 social_accounts 조회 결과로 결정한다.
+     */
+    public static UserMeResponse from(User user, AuthProvider provider) {
         return new UserMeResponse(
                 user.getUserId(),
                 user.getEmail(),
                 user.getNickname(),
                 user.getRole(),
-                user.getProvider(),
+                provider,
                 user.isActive(),
                 user.getCreatedAt()
         );

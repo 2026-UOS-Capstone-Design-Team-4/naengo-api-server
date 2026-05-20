@@ -127,10 +127,14 @@ class SocialAuthIntegrationTest extends IntegrationTestSupport {
         return n.longValue();
     }
 
-    private long userCountByProviderId(String providerId) {
+    /**
+     * V5 분리 이후 — provider_id 는 users 가 아닌 social_accounts.provider_user_id 에 보관.
+     * 같은 외부 카카오 계정에 대해 우리 user 가 몇 개 link 됐는지 (중복 가입 없는지) 검증.
+     */
+    private long userCountByProviderId(String providerUserId) {
         Number n = (Number) entityManager.createNativeQuery(
-                        "SELECT count(*) FROM users WHERE provider_id = :pid")
-                .setParameter("pid", providerId).getSingleResult();
+                        "SELECT count(*) FROM social_accounts WHERE provider = 'KAKAO' AND provider_user_id = :pid")
+                .setParameter("pid", providerUserId).getSingleResult();
         return n.longValue();
     }
 }

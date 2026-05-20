@@ -1,6 +1,5 @@
 package com.naengo.api_server.domain.user.repository;
 
-import com.naengo.api_server.domain.user.entity.AuthProvider;
 import com.naengo.api_server.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -13,6 +12,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByNickname(String nickname);
 
-    // 소셜 로그인: 제공자 + 제공자 고유 ID로 사용자 조회
-    Optional<User> findByProviderAndProviderId(AuthProvider provider, String providerId);
+    // 소셜 식별자(provider, provider_user_id) 조회는 V5 분리 이후
+    // SocialAccountRepository.findByProviderAndProviderUserId 사용.
 }

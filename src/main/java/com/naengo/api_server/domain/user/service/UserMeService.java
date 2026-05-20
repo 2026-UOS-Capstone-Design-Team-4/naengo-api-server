@@ -14,6 +14,7 @@ import com.naengo.api_server.domain.user.dto.UserUpdateRequest;
 import com.naengo.api_server.domain.user.entity.AuthProvider;
 import com.naengo.api_server.domain.user.entity.User;
 import com.naengo.api_server.domain.user.entity.UserProfile;
+import com.naengo.api_server.domain.user.repository.SocialAccountRepository;
 import com.naengo.api_server.domain.user.repository.UserProfileRepository;
 import com.naengo.api_server.domain.user.repository.UserRepository;
 import com.naengo.api_server.global.exception.CustomException;
@@ -47,6 +48,7 @@ public class UserMeService {
 
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
+    private final SocialAccountRepository socialAccountRepository;
     private final LikeRepository likeRepository;
     private final ScrapRepository scrapRepository;
     private final PendingRecipeRepository pendingRecipeRepository;
@@ -56,7 +58,8 @@ public class UserMeService {
 
     @Transactional(readOnly = true)
     public UserMeResponse getMe(Long userId) {
-        return UserMeResponse.from(loadActiveUser(userId));
+        User user = loadActiveUser(userId);
+        return UserMeResponse.from(user, resolveProvider(userId));
     }
 
     @Transactional
@@ -69,23 +72,34 @@ public class UserMeService {
         }
 
         user.changeNickname(request.nickname());
-        return UserMeResponse.from(user);
+        return UserMeResponse.from(user, resolveProvider(userId));
     }
 
     @Transactional
     public void changePassword(Long userId, PasswordChangeRequest request) {
         User user = loadActiveUser(userId);
 
-        if (user.getProvider() != AuthProvider.LOCAL) {
+        // V5: provider 컬럼 제거 — "password 가 없는 사용자(=소셜 전용 가입자)" 로 판정.
+        if (user.getPasswordHash() == null) {
             throw new CustomException(ErrorCode.SOCIAL_PASSWORD_NOT_ALLOWED);
         }
 
-        if (user.getPasswordHash() == null
-                || !passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
             throw new CustomException(ErrorCode.INVALID_CREDENTIALS);
         }
 
         user.changePasswordHash(passwordEncoder.encode(request.newPassword()));
+    }
+
+    /**
+     * 응답의 provider 표기 결정 — social_accounts 에 row 있으면 그 provider, 없으면 LOCAL.
+     * 현 정책상 user 당 0~1 link 이므로 첫 번째 행을 채택.
+     */
+    private AuthProvider resolveProvider(Long userId) {
+        return socialAccountRepository.findByUserId(userId).stream()
+                .findFirst()
+                .map(sa -> AuthProvider.valueOf(sa.getProvider()))
+                .orElse(AuthProvider.LOCAL);
     }
 
     /** api-3.json `GET /api/v1/users/me/profile` — user_input 만. row 없으면 빈 배열. */
@@ -146,6 +160,8 @@ public class UserMeService {
         scrapRepository.deleteAllByUserId(userId);
         pendingRecipeRepository.deleteAllByUserId(userId);
         userProfileRepository.deleteAllByUserId(userId);
+        // V5: 소셜 link 도 함께 제거 — 같은 외부 계정이 다시 가입할 때 신규 user 로 분리
+        socialAccountRepository.deleteAllByUserId(userId);
 
         // 2) 채팅방 soft delete (우리 권한 내, 무충돌). 메시지 본문 PII 스크럽은 AI 합의 후 승격.
         chatRoomRepository.deactivateAllByUserId(userId);
