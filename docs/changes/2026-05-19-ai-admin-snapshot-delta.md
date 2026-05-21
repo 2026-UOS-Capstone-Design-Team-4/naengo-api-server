@@ -80,6 +80,22 @@ admin TS 타입(`adminRecipes.ts`/`RecipeCard.tsx`)이 **신규 정규화 AI 스
 
 ---
 
-> 본 분석은 "파악"만. **코드·스키마 변경 없음** (사용자 지시: 함부로 지우지 말고 유지).
-> 선행 분석: [`2026-05-17-api4-dbv3-delta.md`](2026-05-17-api4-dbv3-delta.md) (§3 정규화 의사결정 안건 — 본 문서로 압박 가중, 미해결).
-> 미결 안건: ① `users` 소유권 (사용자가 AI 팀에 직접 처리) ② **레시피 정규화 B 정본 머지 완료** — AI 팀 정규화 모델 전환·합동 컷오버만 대기 ③ `/me/profile` 3자 계약.
+> 본 분석은 "파악"만. **코드·스키마 변경 없음** (당시 사용자 지시: 함부로 지우지 말고 유지).
+> 선행 분석: [`../archive/changes/2026-05-17-api4-dbv3-delta.md`](../archive/changes/2026-05-17-api4-dbv3-delta.md) (옵션 A 채택으로 archive 이동)
+
+---
+
+## 갱신 (2026-05-21) — 옵션 A 채택 + 운영 배포 성공으로 안건 해소
+
+본 문서의 §3 표 #2~#5 / 부속 미결 안건들이 옵션 A 채택으로 모두 클로즈. 자세히 [`../deploy-status.md §C`](../deploy-status.md):
+
+| 본 문서 안건 | 새 상태 |
+|---|---|
+| #2 admin 도메인 AI 이관 | 🟢 관망 — admin 이 우리에게 retarget 하면 그때 (현재 영향 0) |
+| #3 `users` 소유권 회귀 | 🚫 N/A — DBv5 의 users 에 provider/provider_id 컬럼 자체 없음 |
+| #4 레시피 정규화 가속 | ✅ 완료 — DB 팀원 DBv5 적용 + AI 003/004/005 + 우리 옵션 A, 양측 DBv5 위 동작 |
+| #5 `/me/profile` 3자 계약 | 🟢 우리 측 작업 0 — 우리 PATCH(교체) 와 AI POST/DELETE 가 둘 다 운영, front 가 선택 |
+
+§4 (naengo-front `/me/profile`) 결론 — 우리 contract = front 기대와 일치 — 그대로 유효.
+
+진실원본: [`../auth-user-api.md`](../auth-user-api.md) + [`2026-05-21-option-a-contract-diff.md`](2026-05-21-option-a-contract-diff.md).

@@ -11,71 +11,48 @@ API 서버는 앱(프론트) 과 1차로 마주하는 백엔드다. 책임은 (1
 
 ---
 
-## 1. 현재 상태 (2026-05-13)
+## 1. 현재 상태 (2026-05-21)
 
 | 영역 | 상태 |
 |---|---|
-| DB 마이그레이션 | V1+V2+V3 + **V4 (2026-05-19, 레시피 정규화 옵션 B)** + **V5 (2026-05-19, users/social_accounts 분리)** ([§3](#3-db-스키마), [B 메모](changes/2026-05-19-option-b-normalization.md), [V5 메모](changes/2026-05-19-v5-split-social-accounts.md)). |
-| 인증 | 자체 회원가입 / 로그인 / **카카오 소셜** / 쿠키 + JWT dual. **구글은 미지원** (2026-05-13 제거 완료). |
-| 도메인 구현 | User / Recipe / Pending / Like / Scrap / Chat / Admin 모두 1차 완료. **api-3.json 정합 작업 진행 중** — PR-1~PR-7 완료 + User 인증 마무리 + 전역 snake_case 적용. PR-8(AI 협의 + 헬스체크 `GET /`) 남음 ([§4](#4-앞으로-할-일)). |
-| 응답 규약 | 성공 = raw JSON (래퍼 없음). 실패 = `{"error":{"code","message","details"}}`. **전 요청·응답 JSON 키 snake_case** (Jackson `SNAKE_CASE`, 2026-05-17). |
-| 클라이언트 | naengo-front (Flutter) 는 api-server `/api/v1/...` 기대. **naengo-admin (React) 는 2026-05-18 스냅샷부터 api-server 를 호출하지 않고 naengo-ai(:8000) 직결** ([`changes/2026-05-19-ai-admin-snapshot-delta.md`](changes/2026-05-19-ai-admin-snapshot-delta.md)). |
-| 테스트 | Testcontainers 기반 통합 테스트 **30건 PASS** (Auth 8 / Cors 4 / ProfileChat 3 / Recipe 6 / RequestId 4 / SocialAuth 5). |
-| 인프라 | 로컬 docker-compose. AWS RDS / S3 / 배포는 팀원 담당, 미완료. |
+| DB 스키마 | **DBv5 단일** — DB 팀원이 SQL 로 운영 RDS 에 직접 적용한 ground truth. 우리 Flyway 는 V1=DBv5 + `baseline-on-migrate=true`. AI 도 003/004/005 까지 적용. 양측 모두 같은 스키마 위. 자세히 [§3](#3-db-스키마) |
+| 인증 | 자체 회원가입 / 로그인 (`username` 기반) / **카카오 소셜** / 쿠키 + JWT(HS512) dual. `JWT_SECRET` AI 팀과 동일 값 공유(C3, 전달 후 대기) |
+| 도메인 구현 | User / Recipe / UserRecipe / Like / Scrap / Chat / Admin 모두 옵션 A 정합 완료. 통합테스트 30/30 PASS |
+| 응답 규약 | 성공 = raw JSON (래퍼 없음). 실패 = `{"error":{"code","message","details"}}`. **전 요청·응답 JSON 키 snake_case** (Jackson `SNAKE_CASE`) |
+| 클라이언트 | naengo-front (Flutter) / naengo-admin (React) — 둘 다 현재 naengo-ai(:8000) 직결. 우리 endpoint 는 front 가 미래에 호출 예정. contract = [`changes/2026-05-21-option-a-contract-diff.md`](changes/2026-05-21-option-a-contract-diff.md) |
+| 운영 인프라 | ECR + ECS Fargate + ALB + Secrets Manager 운영 중. ALB DNS `naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com`. 자세히 [`deploy-status.md`](deploy-status.md) |
+| 테스트 | Testcontainers 통합 테스트 **30건 PASS** (Auth 8 / Cors 4 / ProfileChat 3 / Recipe 6 / RequestId 4 / SocialAuth 5) |
 
 ---
 
 ## 2. 문서 지도 (어디서 무엇을 보나)
 
-### 2.1 출발점
+### 2.1 출발점 / 진실원본
 
 - **본 README** — 현행 상태, 인덱스, 진행 우선순위.
-- [`auth-user-api.md`](auth-user-api.md) — **인증·사용자 API 가이드 (팀 공유용)**. 회원가입/로그인/카카오/로그아웃/마이페이지/탈퇴/프로필 요청·응답·에러·통합 흐름.
-- [`kakao-oauth-runbook.md`](kakao-oauth-runbook.md) — **카카오 OAuth 운영 키 설정 + 브라우저 e2e 런북** (배포/운영 담당용, `user-domain-todo §4-1·§4-6`).
-- [`api-server-tasks.md`](api-server-tasks.md) — Step 1~8 작업 카탈로그. 인벤토리 + 결정사항. **마스터 문서.**
+- [`auth-user-api.md`](auth-user-api.md) — **인증·사용자 API 가이드 (팀 공유용)**. 회원가입/로그인/카카오/로그아웃/마이페이지/탈퇴/프로필. 옵션 A 정합으로 갱신됨.
+- [`changes/2026-05-21-option-a-contract-diff.md`](changes/2026-05-21-option-a-contract-diff.md) — **외부 API contract 진실원본**. 옵션 A 후 바뀐 5건 정리 + 변하지 않은 endpoint 표 + front 호환 체크리스트.
+- [`api-server-tasks.md`](api-server-tasks.md) — 작업 카탈로그 (역사적 진행 + 현 상태).
 
-### 2.2 외부 contract
+### 2.2 운영 / 배포
 
-- [`api-3.json`](api-3.json) — AI 서버 OpenAPI 3.1.0 dump (최신 스냅샷). front/admin 이 따라가는 contract.
-- [`spec/ai-server-contract.md`](spec/ai-server-contract.md) — api-1 시점 갭분석 (history 참고용. 본 README §3 의 결합 표가 우선).
-- [`spec/api3-alignment-and-integration.md`](spec/api3-alignment-and-integration.md) — **api-3.json 기준 정합 작업 카탈로그 (2026-05-13)**. front/admin/ai 통합 작업 목록 포함.
-
-### 2.3 도메인 명세 (배경 — 일부 PR-1~7 이전)
-
-> ⚠️ 아래 도메인 명세들은 **PR-1~7 이전에 작성**되어 경로/응답/메서드가 일부 낡았다
-> (예: 토글 endpoint, `/api/` prefix, `PUT /profile`, `POST /approve`, 페이지네이션).
-> **현행 엔드포인트·응답의 진실원본은
-> [`spec/api3-alignment-and-integration.md §1.1`](spec/api3-alignment-and-integration.md)**.
-> 아래 문서는 도메인 의도·비즈니스 규칙 배경 자료로만 본다.
-
-| 도메인 | 명세서 |
-|---|---|
-| Recipe | [`spec/recipe-create-v2.md`](spec/recipe-create-v2.md), [`spec/recipe-read-v2.md`](spec/recipe-read-v2.md), [`spec/recipe-delete-v2.md`](spec/recipe-delete-v2.md) |
-| Like / Scrap | [`spec/like-toggle.md`](spec/like-toggle.md), [`spec/scrap-toggle.md`](spec/scrap-toggle.md), [`spec/scrap-list.md`](spec/scrap-list.md) |
-| User (자체/소셜 인증) | [`spec/user-me-get.md`](spec/user-me-get.md), [`spec/user-me-update.md`](spec/user-me-update.md), [`spec/user-password-change.md`](spec/user-password-change.md), [`spec/user-withdraw.md`](spec/user-withdraw.md) |
-| User Profile | [`spec/user-preferences-get.md`](spec/user-preferences-get.md), [`spec/user-preferences-update.md`](spec/user-preferences-update.md) |
-| Chat (read-only) | [`spec/chat-room-list.md`](spec/chat-room-list.md), [`spec/chat-message-list.md`](spec/chat-message-list.md) |
-| Admin | [`spec/admin-pending-recipe-list.md`](spec/admin-pending-recipe-list.md), [`spec/admin-recipe-review.md`](spec/admin-recipe-review.md), [`spec/admin-user-block.md`](spec/admin-user-block.md) |
-| Upload (S3) | [`spec/upload-presigned-url.md`](spec/upload-presigned-url.md) — S3 인프라 준비 후 구현 (보류) |
-| Auth Cookie | [`spec/auth-cookie.md`](spec/auth-cookie.md) — JWT HttpOnly 쿠키 발급/만료 |
-
-### 2.4 정책 / 운영 / 배포
-
-- [`deploy-env.md`](deploy-env.md) — **운영(prod) 환경변수 주입 체크리스트 + 부팅 검증** (`.env.example` 템플릿 동반).
+- [`deploy-status.md`](deploy-status.md) — **운영 배포 진척/체크리스트/입력값** (다음 세션 재진입 0순위 문서).
+- [`deploy-env.md`](deploy-env.md) — **운영 환경변수 주입 체크리스트 + ECS Fargate/Secrets Manager/GitHub OIDC 단계별 절차**.
 - [`kakao-oauth-runbook.md`](kakao-oauth-runbook.md) — 카카오 OAuth 콘솔 설정 + 브라우저 e2e (로컬 e2e 2026-05-18 완료).
-- [`changes/chat-withdrawal-ai-agreement.md`](changes/chat-withdrawal-ai-agreement.md) — **탈퇴 시 chat PII hard delete AI 합의 안건서** (옵션 A 권고, AI 회신 대기).
-- [`changes/auth-entry-point.md`](changes/auth-entry-point.md) — 401/403 일관 응답.
-- [`changes/logging-policy.md`](changes/logging-policy.md) — X-Request-Id, MDC, PII 로그 금지.
 - [`db-testing-guide.md`](db-testing-guide.md) — 로컬 DB 기동 / Flyway 검증.
 
-### 2.5 진행 중 / 다음 작업
+### 2.3 정책 / 살아있는 안건
 
-- [`spec/api3-alignment-and-integration.md`](spec/api3-alignment-and-integration.md) — **다음 8개 PR 의 입력**. 우선순위는 §6.
-- [`spec/user-domain-todo.md`](spec/user-domain-todo.md) — **User 도메인 (로그인 + 카카오 소셜) TODO 리스트 (2026-05-13)**. 본 README 와 같이 발행.
-- [`changes/2026-05-17-api4-dbv3-delta.md`](changes/2026-05-17-api4-dbv3-delta.md) — api-4/DBv3/front 변경점 분석. **레시피 정규화 채택(A/B) 의사결정 안건 — 미해결.**
-- [`changes/2026-05-19-ai-admin-snapshot-delta.md`](changes/2026-05-19-ai-admin-snapshot-delta.md) — **ai/admin 신규 스냅샷 분석. admin→AI 직결 전환 + `users` 소유권 회귀(AI 팀 에스컬레이션 필요).**
+- [`changes/auth-entry-point.md`](changes/auth-entry-point.md) — 401/403 일관 응답 정책.
+- [`changes/logging-policy.md`](changes/logging-policy.md) — X-Request-Id, MDC, PII 로그 금지.
+- [`changes/chat-withdrawal-ai-agreement.md`](changes/chat-withdrawal-ai-agreement.md) — 탈퇴 시 chat PII hard delete AI 합의 안건서 (회신 대기).
+- [`spec/auth-cookie.md`](spec/auth-cookie.md) — JWT HttpOnly 쿠키 발급/만료 정책 (옵션 A 후도 정합).
 
-### 2.6 템플릿
+### 2.4 옵션 A 채택의 외부 영향 분석 (history + 진실원본)
+
+- [`changes/2026-05-19-ai-admin-snapshot-delta.md`](changes/2026-05-19-ai-admin-snapshot-delta.md) — ai/admin 신규 스냅샷 영향 분석. 옵션 A 채택으로 C1/C2/C4 안건 클로즈 (자세히 [`deploy-status.md §C`](deploy-status.md)).
+
+### 2.5 템플릿
 
 - [`spec-template.md`](spec-template.md) — 신규 명세 작성 시 복사.
 - [`change-log-template.md`](change-log-template.md) — 명세 변경 시 change-log 발행.
@@ -84,40 +61,41 @@ API 서버는 앱(프론트) 과 1차로 마주하는 백엔드다. 책임은 (1
 
 ## 3. DB 스키마
 
+옵션 A 채택 (2026-05-21) 으로 우리 자체 진화한 V1~V5 는 폐기. 운영 RDS = DB 팀원이 SQL 로 적용한 DBv5 = 우리 신규 V1 = AI 의 schema.sql (003~005 마이그레이션 후) 모두 동일.
+
 | 마이그레이션 | 내용 |
 |---|---|
-| `V1__init.sql` | 초기 스키마 (구 V4 통합 후의 모습). BIGSERIAL PK, AI contract 정합. |
-| `V2__add_social_login_fields.sql` | `users.password_hash` nullable, `provider`, `provider_id`, `uq_provider_provider_id` UNIQUE. |
-| `V3__add_user_deleted_at.sql` | `users.deleted_at` (탈퇴 익명화). |
+| `V1__init.sql` | DBv5 전체 (broken 참조 2건만 정정). `users`(username/password_hash/nickname/role/is_active/is_blocked, updated_at trigger), `user_identities`(소셜 link, provider KAKAO/GOOGLE/NAVER/APPLE CHECK), `user_profiles`(JSONB NOT NULL DEFAULT), 정규화 recipes + recipe_ingredients/steps/labels/media/nutrition/classifications/stats, `user_recipes`(submission_text + draft_payload JSONB), chat_rooms/messages, likes, scraps. PK 모두 `SERIAL/INTEGER`. |
 
-> naengo-ai 의 실 모델 (`app/models/*.py`) 과 95% 정합. naengo-ai/db/schema.sql 의 정규화 설계는 채택하지 않음 (자세히는 [`spec/api3-alignment-and-integration.md §3`](spec/api3-alignment-and-integration.md)).
+운영 prod 는 `spring.flyway.baseline-on-migrate=true` + `baseline-version="1"` — DB 팀원이 이미 적용한 상태를 baseline 으로 마크하고 migrate skip. dev/test 는 처음부터 V1 적용 (Testcontainers 가 자동).
 
 ---
 
 ## 4. 앞으로 할 일
 
-진행 우선순위 (자세히는 [`spec/api3-alignment-and-integration.md §6`](spec/api3-alignment-and-integration.md)):
+진행 우선순위 (자세히는 [`deploy-status.md`](deploy-status.md) §"다음 액션"):
 
-1. ~~**User 도메인 점검 + 카카오 소셜 마무리**~~ — ✅ **완료 (2026-05-17)**. 회원가입/로그인/카카오/로그아웃/마이페이지/탈퇴/프로필 구현·테스트 완료, §2~§8 결정 기록. 외부/운영 의존 항목만 잔존 → [`spec/user-domain-todo.md`](spec/user-domain-todo.md)
-2. ~~`/api/v1/...` prefix 일괄 적용~~ — ✅ PR-1 (2026-05-13)
-3. ~~`ApiResponse<T>` 래퍼 폐기 + 표준 에러 응답~~ — ✅ PR-2 (2026-05-13)
-4. ~~레시피 목록 커서 페이지네이션 + `is_liked`/`is_scrapped`~~ — ✅ PR-3 (2026-05-16)
-5. ~~pending-recipes 분리 + soft delete~~ — ✅ PR-4 (2026-05-16)
-6. ~~좋아요/스크랩 POST/DELETE 분리 + 409 + scrap list 경로 이동~~ — ✅ PR-5 (2026-05-16)
-7. ~~Admin `PATCH` 통합 + `GET /admin/recipes?video_url=`~~ — ✅ PR-6 (2026-05-16)
-8. ~~프로필 응답 모양 정합 + 채팅 path 정합 + 채팅방 soft delete~~ — ✅ PR-7 (2026-05-16)
-9. ~~User 인증 API 마무리(프로필 자동생성/카카오 테스트) + 전역 snake_case~~ — ✅ 2026-05-17 ([`auth-user-api.md`](auth-user-api.md))
-10. AI 팀 협의(D-1~D-7) + 헬스체크 `GET /` ← **다음 (PR-8, 협의 필요)**
+| # | 항목 | 트리거 |
+|---|---|---|
+| 1 | **B5 + A2 + A3** ACM + Route53 + listener:443 + KAKAO_REDIRECT_URI update + CORS 좁힘 | **운영 도메인 결정** |
+| 2 | **C3** AI 측 SECRET 적용·검증 회신 | AI 팀 |
+| 3 | **D3** CloudWatch billing alarm + 모니터링 | 언제든 |
+| 4 | **D4** IAM 사용자 권한 좁히기 (AdministratorAccess → 좁은 정책) | 안정화 후 |
+| 5 | **D1** 로컬 `.env` secret 정리 (Secrets Manager 이관 완료, 로컬 dev-only) | 언제든 |
 
 ---
 
 ## 5. archive 의 의미
 
-- `archive/spec/` — v2 가 발행되어 대체된 v1 명세 (recipe-{create,read,delete}.md).
+- `archive/spec/` — 옵션 A 이전 (PR-1~7 시점) 의 도메인 명세 (user/recipe/like/scrap/chat/admin/upload) + 그 이전 v1 명세 (recipe-{create,read,delete}.md) + PR-1~7 정합 카탈로그 + 옛 ai-server-contract / user-domain-todo. **진실원본은 `auth-user-api.md` + `changes/2026-05-21-option-a-contract-diff.md` + 코드.**
 - `archive/changes/` — 결론이 났거나 전제 자체가 사라진 change-log.
+  - `2026-05-17-api4-dbv3-delta.md` — 옵션 A/B 결정 안건. A 채택으로 종결.
+  - `2026-05-19-option-b-normalization.md` — 옵션 B 설계 메모. A 채택으로 사문화.
+  - `2026-05-19-v5-split-social-accounts.md` — 우리 자체 V5(social_accounts) 설명. 옵션 A 의 user_identities 채택으로 폐기.
   - `V4-integration-{issues,resolved}.md` — 2026-05-02 V1↔V4 통합 history.
-  - `SPEC-20260422-02-CL01.md`, `SPEC-20260422-04-CL01.md` — v1 명세 보강 메모. v2 발행으로 자동 폐기.
-  - `oauth-google-status.md` — 구글 소셜 미실현 메모. 2026-05-13 구글 제거 결정으로 폐기.
-- `archive/api-1.json`, `api-2.json` — 옛 AI OpenAPI 스냅샷. 진실원본은 `api-3.json`.
+  - `SPEC-20260422-02-CL01.md`, `SPEC-20260422-04-CL01.md` — v1 명세 보강 메모.
+  - `oauth-google-status.md` — 구글 소셜 미실현 메모.
+- `archive/api-1.json`, `api-2.json` — 옛 AI OpenAPI 스냅샷.
+- `api-3.json` (루트 docs) — 옵션 A 이전 스냅샷. 정합 안 됨. 참조 시 [`changes/2026-05-21-option-a-contract-diff.md`](changes/2026-05-21-option-a-contract-diff.md) 으로 보정.
 
 **archive 는 읽지 않는다.** 단 git log / 이력 추적 시에만 참고.

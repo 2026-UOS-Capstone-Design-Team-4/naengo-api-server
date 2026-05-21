@@ -2,8 +2,16 @@
 
 > 대상: front / admin / AI 서버 담당자
 > 범위: **회원가입 · 로그인 · 카카오 소셜 · 로그아웃 · 마이페이지 · 회원탈퇴 · 프로필**
-> 상태: **구현 + 통합테스트 완료** (2026-05-17 기준, 통합 테스트 29건 PASS)
-> 작성: API 서버 담당자 · 진실원본: 본 문서 + [`spec/api3-alignment-and-integration.md §1.1`](spec/api3-alignment-and-integration.md)
+> 상태: **운영 배포 완료** (2026-05-21, 옵션 A — DBv5 정합. 통합테스트 30/30 PASS)
+> 작성: API 서버 담당자 · 진실원본: 본 문서 + [`changes/2026-05-21-option-a-contract-diff.md`](changes/2026-05-21-option-a-contract-diff.md)
+>
+> **2026-05-21 변경점 요약** (옵션 A 채택):
+> - signup/login `email` → **`username`** (필드명 변경, validation 3~255자)
+> - `/api/v1/users/me` 응답 `email` → **`username`** + `deleted_at` 제거
+> - `/api/v1/[admin/]pending-recipes` → **`/api/v1/[admin/]user-recipes`** (path 변경)
+> - 응답 `pending_recipe_id` → **`user_recipe_id`** (PK 키 변경)
+> - 내부: `social_accounts` → `user_identities` (응답 외형 무영향)
+> - PK 폭 BIGINT → INTEGER (JSON number 그대로, 클라 영향 0)
 
 ---
 
@@ -64,11 +72,11 @@ JWT 만료 **24시간**, refresh token 없음 → 만료 시 **재로그인**.
 
 **Request**
 ```json
-{ "email": "user@naengo.com", "password": "pw12345A", "nickname": "냉장고요리왕" }
+{ "username": "user@naengo.com", "password": "pw12345A", "nickname": "냉장고요리왕" }
 ```
 | 필드 | 규칙 |
 |---|---|
-| `email` | 이메일 형식, 필수 |
+| `username` | 3~255자, 필수. 이메일 형식 강제 안 함(자유 식별자) — 이메일을 그대로 써도 OK |
 | `password` | 8~64자, 영문+숫자 각 1자 이상, 필수 |
 | `nickname` | 2~20자, 필수 |
 
@@ -87,7 +95,7 @@ JWT 만료 **24시간**, refresh token 없음 → 만료 시 **재로그인**.
 
 **Request**
 ```json
-{ "email": "user@naengo.com", "password": "pw12345A" }
+{ "username": "user@naengo.com", "password": "pw12345A" }
 ```
 
 **Response `200`** (+ `Set-Cookie: NAENGO_AT`)
@@ -110,8 +118,8 @@ JWT 만료 **24시간**, refresh token 없음 → 만료 시 **재로그인**.
   1. 카카오 SDK / OAuth 로 카카오 access token 획득
   2. POST /api/v1/auth/social/kakao  { "access_token": "<카카오 토큰>" }
 [API 서버]
-  3. 카카오 API 로 토큰 검증 → providerId(+email) 획득
-  4. (provider=KAKAO, providerId) 로 계정 조회 / 신규 생성
+  3. 카카오 API 로 토큰 검증 → provider_user_id (+email) 획득
+  4. (provider=KAKAO, provider_user_id) 로 `user_identities` 조회 / 신규 생성
   5. 자체 JWT 발급 (이후 모든 API 는 이 JWT 사용 — 카카오 토큰 불필요)
 ```
 
@@ -125,10 +133,10 @@ JWT 만료 **24시간**, refresh token 없음 → 만료 시 **재로그인**.
 { "user_id": 7, "nickname": "kakao_a1b2c3d4", "role": "USER", "access_token": "eyJ..." }
 ```
 - 신규 카카오 사용자 닉네임은 `kakao_<랜덤8자>` 자동 생성 (이후 닉네임 수정 API 로 변경)
-- 카카오가 이메일 미동의 시 내부 placeholder(`kakao_<id>@social.naengo.com`)로 저장 — 식별자는 (provider, providerId)
+- 카카오가 이메일 미동의 시 내부 placeholder(`kakao_<id>@social.naengo.com`)를 **`users.username`** 에 저장 — 식별자는 `(provider, provider_user_id)` 로 `user_identities` 테이블에. `users.username` 의 placeholder 와 별도로 `user_identities.email` 컬럼에 카카오가 준 실 이메일(또는 placeholder) 도 보관.
 
 **에러**: `401 SOCIAL_AUTH_FAILED` (카카오 토큰 무효), `403 USER_BLOCKED`,
-`409 EMAIL_PROVIDER_CONFLICT` (같은 이메일이 LOCAL 로 이미 가입 → 기존 방식으로 로그인 안내)
+`409 EMAIL_PROVIDER_CONFLICT` (같은 username 이 LOCAL 로 이미 가입 → 기존 방식으로 로그인 안내)
 
 ---
 
@@ -150,13 +158,14 @@ JWT 만료 **24시간**, refresh token 없음 → 만료 시 **재로그인**.
 **Response `200`**
 ```json
 {
-  "user_id": 1, "email": "user@naengo.com", "nickname": "냉장고요리왕",
+  "user_id": 1, "username": "user@naengo.com", "nickname": "냉장고요리왕",
   "role": "USER", "provider": "LOCAL", "is_active": true,
   "created_at": "2026-04-01T09:00:00+09:00"
 }
 ```
-- `provider`: `LOCAL` | `KAKAO`
-- 카카오 이메일 미동의 사용자는 `email` 이 placeholder 일 수 있음
+- `provider`: `LOCAL` | `KAKAO` (현 서비스 구현 한도. DB CHECK 는 `KAKAO/GOOGLE/NAVER/APPLE` 도 허용해 둠 — 추후 확장)
+- 카카오 이메일 미동의 사용자는 `username` 이 placeholder (`kakao_<id>@social.naengo.com`) 일 수 있음
+- `deleted_at` 필드 없음 — 탈퇴 사용자는 `is_active=false` 로 판정
 
 **에러**: `401 UNAUTHENTICATED`, `404 USER_NOT_FOUND`
 
@@ -182,7 +191,7 @@ JWT 만료 **24시간**, refresh token 없음 → 만료 시 **재로그인**.
 
 ## 7. 비밀번호 변경 — `POST /api/v1/users/me/password`
 
-- 인증: 필요 · **LOCAL 사용자 전용** (카카오 사용자는 403)
+- 인증: 필요 · **자체 가입자 전용** (`password_hash` 가 있는 사용자만. 소셜 전용 가입자는 403)
 
 **Request**
 ```json
@@ -203,8 +212,8 @@ JWT 만료 **24시간**, refresh token 없음 → 만료 시 **재로그인**.
 ## 8. 회원 탈퇴 — `DELETE /api/v1/users/me`
 
 - 인증: 필요
-- **익명화 방식**: `users` row 보존 + PII nullify(email/password/providerId) + 닉네임 `탈퇴한 사용자_<id>` + `is_active=false`, `is_blocked=true`, `deleted_at=now`
-- 부속 데이터(좋아요/스크랩/제출레시피/프로필) 삭제 + 채팅방 soft delete(`is_active=false`). 작성 레시피는 보존(응답 시 닉네임 `탈퇴한 사용자` 치환)
+- **익명화 방식**: `users` row 보존 + PII nullify(`username`/`password_hash`) + 닉네임 `탈퇴한 사용자_<id>` + `is_active=false`, `is_blocked=true`. (옵션 A 후 `deleted_at` 컬럼 없음 — `is_active=false` 가 탈퇴 표식 단일화)
+- 부속 데이터(좋아요/스크랩/제출레시피/프로필/`user_identities` 소셜 link) 삭제 + 채팅방 soft delete(`is_active=false`). 작성 레시피는 보존(응답 시 닉네임 `탈퇴한 사용자` 치환)
 
 **Response `204`** (+ `Set-Cookie: NAENGO_AT=; Max-Age=0`)
 
