@@ -19,7 +19,9 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String userId) throws UsernameNotFoundException {
-        User user = userRepository.findById(Long.parseLong(userId))
+        // 옵션 A — DBv5 SERIAL PK 정합으로 Integer.parseInt. Spring Security 의
+        // loadUserByUsername 인자명이 "username" 이지만 실제 값은 우리 userId 문자열.
+        User user = userRepository.findById(Integer.parseInt(userId))
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
         if (user.isBlocked()) {

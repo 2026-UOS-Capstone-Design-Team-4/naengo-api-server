@@ -30,8 +30,8 @@ public class JwtTokenProvider {
         this.secretKey = Keys.hmacShaKeyFor(secretKeyString.getBytes(StandardCharsets.UTF_8));
     }
 
-    // 토큰 생성
-    public String generateToken(Long userId, String role) {
+    // 토큰 생성 — DBv5 SERIAL PK 정합으로 userId Integer.
+    public String generateToken(Integer userId, String role) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
@@ -42,9 +42,9 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    // 토큰에서 userId 추출
-    public Long getUserId(String token) {
-        return Long.parseLong(getClaims(token).getSubject());
+    // 토큰에서 userId 추출 (Integer).
+    public Integer getUserId(String token) {
+        return Integer.parseInt(getClaims(token).getSubject());
     }
 
     // 토큰에서 role 추출

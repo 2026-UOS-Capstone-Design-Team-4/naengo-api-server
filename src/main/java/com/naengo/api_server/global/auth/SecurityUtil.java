@@ -7,14 +7,14 @@ public final class SecurityUtil {
 
     private SecurityUtil() {}
 
-    /** 현재 로그인된 사용자의 userId. 비로그인이면 null. */
-    public static Long currentUserIdOrNull() {
+    /** 현재 로그인된 사용자의 userId. 비로그인이면 null. (옵션 A — DBv5 SERIAL PK 정합으로 Integer) */
+    public static Integer currentUserIdOrNull() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) return null;
         String name = auth.getName();
         if (name == null || "anonymousUser".equals(name)) return null;
         try {
-            return Long.parseLong(name);
+            return Integer.parseInt(name);
         } catch (NumberFormatException e) {
             return null;
         }
