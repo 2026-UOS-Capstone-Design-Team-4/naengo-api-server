@@ -35,8 +35,8 @@
 | **ALB DNS** | **`naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com`** (도메인 부착 전 검증용 — `http://<이 호스트>/` 로 접근) |
 | Target Group ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:targetgroup/naengo-api-server-tg/1303d640c7a0ed98` (HTTP 8080, target-type ip, health check `/`) |
 | Listener:80 ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:listener/app/naengo-api-server-alb/159ba31da2dc086e/bebdb0686756e3b2` |
-| SNS billing topic | `arn:aws:sns:us-east-1:518056141724:naengo-billing-alerts` (subscription: ppoobb94471@gmail.com, PendingConfirmation) |
-| SNS ops topic | `arn:aws:sns:ap-northeast-2:518056141724:naengo-ops-alerts` (subscription: ppoobb94471@gmail.com, PendingConfirmation) |
+| SNS billing topic | `arn:aws:sns:us-east-1:518056141724:naengo-billing-alerts` (subscription: ppoobb94471@gmail.com, ✅ Confirmed 2026-05-22) |
+| SNS ops topic | `arn:aws:sns:ap-northeast-2:518056141724:naengo-ops-alerts` (subscription: ppoobb94471@gmail.com, ✅ Confirmed 2026-05-22) |
 | CloudWatch alarms (4종) | `naengo-billing-over-20-usd`(us-east-1) / `naengo-alb-target-5xx` / `naengo-tg-unhealthy-host` / `naengo-rds-cpu-high`(ap-northeast-2) |
 | 운영 도메인 (`api.???`) | (미정) |
 | 카카오 운영 redirect URI | (미정) — 운영 도메인 결정 후 |
@@ -108,11 +108,11 @@
 
 | # | 항목 | 상태 | 메모 |
 |---|---|---|---|
-| D1 | `.env` 평문 secret → Secrets Manager 이관 후 로컬 `.env` 에선 dev-only 값 또는 제거 | ⏸ | B3 와 함께 |
+| D1 | `.env` 평문 secret → Secrets Manager 이관 후 로컬 `.env` 에선 dev-only 값 또는 제거 | ✅ | 2026-05-22 로컬 `.env` 운영 secret 4종 제거 (DB host/password, JWT_SECRET, KAKAO key) → 로컬 docker-compose 더미값으로 치환. 운영 실값은 Secrets Manager 만 보유. `.env` 는 `.gitignore` 보호 + git history 노출 0 확인 |
 | D2 | CORS 좁힘 (= A3) | ⏸ | |
-| D3 | CloudWatch alarm 4종 + SNS 이메일 알림 | 🟡 | 생성 완료 (billing $20 / ALB 5xx>5/5m / TG UnHealthyHost / RDS CPU>80%). **사용자 confirm 2건 대기** — SNS 가입 메일 (us-east-1 + ap-northeast-2 별도) "Confirm subscription" 클릭 + AWS billing prefs 의 "Receive CloudWatch billing alerts" ON 필요. 그 후 ✅. 인증 실패 율 (Logs metric filter) 등 추가는 별도 |
+| D3 | CloudWatch alarm 4종 + SNS 이메일 알림 | ✅ | 2026-05-22 완료. 4 alarm (billing $20 / ALB 5xx>5/5m / TG UnHealthyHost / RDS CPU>80%) + SNS 2 topic 모두 Confirmed. 사용자 측 AWS billing preferences "Receive CloudWatch billing alerts" ON 완료 |
 | D4 | IAM 사용자 권한 좁히기 (현재 AdministratorAccess) | ⏸ | 첫 배포 안정화 후 ECR/Secrets/ECS/RDS-describe 만 가진 좁은 policy 로 |
-| D5 | IAM 사용자 MFA 활성화 | ⏸ | |
+| D5 | IAM 사용자 MFA 활성화 | ✅ | 2026-05-22 |
 
 ---
 
@@ -120,11 +120,13 @@
 
 🎉 **첫 배포 완료 (2026-05-21)** — ALB DNS `http://naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com/` 정상 응답. signup → user_id=4 발급 + 쿠키 정상.
 
-남은 작업:
-1. **B5 / A2 / A3** — 운영 도메인 결정 후 ACM + Route53 + listener:443 부착 → 그 시점에 `update-secret` 으로 KAKAO_REDIRECT_URI prod 값 교체 + CORS 좁힘
-2. **C3** — 옵션 (a) 채택. 우리 현 `JWT_SECRET` 그대로 AI 에 안전 채널 전달 → AI 측 적용 후 토큰 cross-verify (login 토큰 → AI endpoint 호출)
-3. **D3** — CloudWatch billing alarm + 5xx 율 + 인증실패 율 monitoring
-4. **D4** — IAM 사용자 권한 좁히기 (현 AdministratorAccess → ECR/Secrets/ECS/RDS-describe 만)
+**우리측 단독 작업 (D1/D3/D5) 모두 완료 — 2026-05-22**.
+
+남은 작업 (외부 의존):
+1. **C3** [AI 팀] — 옵션 (a) 채택. 우리 현 `JWT_SECRET` 그대로 AI 에 안전 채널 전달 → AI 측 적용 후 토큰 cross-verify (login 토큰 → AI endpoint 호출)
+2. **C4** [프론트 팀] — `/me/profile` PATCH vs AI POST/DELETE 선택 (우리 측 작업 0)
+3. **B5 / A2 / A3** [도메인 결정] — 운영 도메인 결정 후 ACM + Route53 + listener:443 부착 → 그 시점에 `update-secret` 으로 KAKAO_REDIRECT_URI prod 값 교체 + CORS 좁힘
+4. **D4** [보류 권장] — IAM 사용자 권한 좁히기. 운영 1~2주 안정화 후 (지금 좁히면 트러블슛 막힐 수 있음)
 
 > 운영 도메인이 정해지지 않은 상태에서도 B3/B4 까진 placeholder 로 진행 가능 (KAKAO_REDIRECT_URI 만 임시값). B5(ALB+Route53)는 도메인 필요.
 
