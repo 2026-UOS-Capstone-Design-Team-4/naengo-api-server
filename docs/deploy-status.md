@@ -24,7 +24,9 @@
 | ECS cluster / service 이름 | (미정) |
 | 운영 도메인 (`api.???`) | (미정) |
 | 카카오 운영 redirect URI | (미정) — 운영 도메인 결정 후 |
-| Secrets Manager ARN 들 | (미생성) |
+| Secrets Manager ARN | `naengo/prod/db` = `arn:aws:secretsmanager:ap-northeast-2:518056141724:secret:naengo/prod/db-iUa2In` |
+| | `naengo/prod/jwt` = `arn:aws:secretsmanager:ap-northeast-2:518056141724:secret:naengo/prod/jwt-9m02fH` |
+| | `naengo/prod/kakao` = `arn:aws:secretsmanager:ap-northeast-2:518056141724:secret:naengo/prod/kakao-8yZdEV` |
 
 ---
 
@@ -52,10 +54,11 @@
 | B2-c | GitHub Secrets (`AWS_ROLE_TO_ASSUME` / `AWS_REGION` / `ECR_REPOSITORY`) | ✅ | 콘솔로 주입 |
 | B2-d | CI test job 30/30 PASS | ✅ | run 26194902810 / 26195691470 둘 다 test job 성공 |
 | B2-e | CI build-and-push job → ECR 이미지 푸시 | 🟡 | trust 정정 후 재실행(attempt 2): OIDC ✓ / ECR login ✓ / Buildx ✓ / **Build and push 가 `useradd exit 4` 로 실패** — runtime base 가 UID 1000 점유. UID/GID 10001 로 정정 (Dockerfile 수정). 다음 push 로 재트리거 |
-| B3 | Secrets Manager 3종 생성 + ECS Execution Role 권한 | ⏸ | A4 Dockerfile 변경 + CI 정상 확인 후 |
-| B3-a | `naengo/prod/db` (DB_URL/DB_USERNAME/DB_PASSWORD) | ⏸ | DB_URL 은 `.env` 의 정정된 값 그대로 |
-| B3-b | `naengo/prod/jwt` (JWT_SECRET — AI 와 동일 값) | ⏸ | C3 합의 후 동일 값 |
-| B3-c | `naengo/prod/kakao` (KAKAO_REST_API_KEY/KAKAO_REDIRECT_URI) | ⏸ | A2 결정 후 |
+| B3 | Secrets Manager 3종 생성 + ECS Execution Role 권한 | 🟡 | secret 생성 ✅. Execution Role 권한은 B4 와 함께 |
+| B3-a | `naengo/prod/db` (DB_URL/DB_USERNAME/DB_PASSWORD) | ✅ | ARN: `...:secret:naengo/prod/db-iUa2In`. 값 = `.env` 정정된 것 그대로 |
+| B3-b | `naengo/prod/jwt` (JWT_SECRET) | ✅ | ARN: `...:secret:naengo/prod/jwt-9m02fH`. **현재 dev 값** — C3 합의(AI 팀 동일 값) 후 `update-secret` 로 교체 필요 |
+| B3-c | `naengo/prod/kakao` (KAKAO_REST_API_KEY/KAKAO_REDIRECT_URI) | ✅ | ARN: `...:secret:naengo/prod/kakao-8yZdEV`. **KAKAO_REDIRECT_URI 는 localhost placeholder** — A2(운영 도메인 결정) 후 update 필요 |
+| B3-d | ECS Task Execution Role 에 `secretsmanager:GetSecretValue` 부여 | ⏸ | B4 (Task Definition) 와 함께 처리. role 자체가 계정에 없으면 ECS 첫 클러스터 생성 시 자동 생성됨 |
 | B4 | ECS Cluster + Task Definition + Service (Fargate) | ⏸ | Task Definition JSON 예시: [`deploy-env.md §5.1-3`](deploy-env.md) |
 | B5 | ALB + Target Group + ACM 인증서 + Route53 | ⏸ | 운영 도메인 결정 필요 |
 | B6 | 보안그룹 4종 (인터넷→ALB / ALB→ECS / ECS→RDS / ECS→kakao) | ⏸ | B4/B5 와 병행 가능 |
@@ -68,7 +71,7 @@
 
 | # | 상대 | 안건 | 상태 |
 |---|---|---|---|
-| C0 | **DB 팀원** | **V4(레시피 정규화) + V5(users 컬럼 제거) 적용 예정 통지 + RDS 사전 점검 협의** | ⏸ |
+| C0 | **DB 팀원** | **V4(레시피 정규화) + V5(users 컬럼 제거) 적용 예정 통지 + RDS 사전 점검 협의** | ✅ |
 | C1 | AI 팀 | V5 후 AI 코드가 `users.provider`/`provider_id` 컬럼을 SELECT 한 적 있다면 `social_accounts` JOIN 으로 전환 필요 | ⏸ |
 | C2 | AI 팀 | 레시피 정규화(B) 합동 컷오버 일정 — 단독 배포 시 양 서버 장애 | ⏸ |
 | C3 | AI 팀 | `JWT_SECRET` 운영 값 동일 공유 (D-2) | ⏸ |
@@ -90,13 +93,15 @@
 
 ## 현재 막힌 지점 / 다음 액션 (우선순위)
 
-1. **B2-e** — trust policy 정정 완료. 직전 실패 워크플로 **Re-run all jobs** 또는 빈 commit push 로 재트리거. ECR 에 `1eaf4da` + `latest` 태그 이미지 푸시되면 B2 완료
-2. **B7 / C0** — DB 운영 팀원과 V4/V5 적용 통지 + RDS 사전 점검 협의 (B3 이후 ECS 띄우기 전에 끝나야 함)
-3. **B3** — B2-e 통과 + C0 합의 후 Secrets Manager 3종 생성
-4. **B4~B8** — 그 후 순차
+1. **B4** — ECS Cluster + Task Definition + Service (Fargate). Task Definition JSON 의 `secrets[*].valueFrom` 에 위 §0 의 3 ARN 사용 (`<ARN>:KEY::` 형식). Execution Role 도 같이 생성/권한 부여.
+2. **B5** — ALB + Target Group + ACM + Route53 (운영 도메인 결정 필요)
+3. **B6** — 보안그룹 4종 (B4/B5 와 병행)
+4. **B7** — RDS 사전 점검 (C0 합의됐으나 첫 배포 직전 V4/V5 적용 가능 상태 재확인)
+5. **B8** — 첫 배포 검증
 
 > 운영 도메인이 정해지지 않은 상태에서도 B3/B4 까진 placeholder 로 진행 가능 (KAKAO_REDIRECT_URI 만 임시값). B5(ALB+Route53)는 도메인 필요.
 
 ## 변경 이력
 
 - 2026-05-21 신설. B1 완료, A4 commit `1eaf4da`. B2 CI 1차 시도 — test ✓ / build-push 가 OIDC AssumeRole 실패(trust policy sub placeholder). trust 정정 후 재실행 attempt 2 — OIDC ✓ / build-push 가 `useradd exit 4` (UID 1000 충돌) 실패. Dockerfile UID/GID 10001 로 정정 + A6 Spring Initializr 디폴트 정정 동시 진행.
+- 2026-05-21 B2 완료 (CI 통과, ECR 에 이미지 누적). C0 합의 완료. **B3 Secrets Manager 3종 생성 완료** (db/jwt/kakao). JWT 와 KAKAO_REDIRECT_URI 는 추후 `update-secret` 필요.
