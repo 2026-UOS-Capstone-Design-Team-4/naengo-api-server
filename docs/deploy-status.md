@@ -78,10 +78,12 @@
 | B4-c | Task Definition 등록 (rev 1) | ✅ | image SHA pin `63bab5b9...`, cpu/mem 512/1024, env 2 + secrets 6, awslogs |
 | B4-d | 보안그룹 3변경 (ALB SG / ECS SG / RDS SG inbound) | ✅ | ALB-SG 80 from internet, ECS-SG 8080 from ALB-SG, RDS-SG 5432 from ECS-SG (기존 ec2-rds-1 보존) |
 | B4-e | ALB + Target Group + listener:80 | ✅ | ALB DNS / TG / Listener ARN §0. TG targets 비어 있음 (Service 미생성, 정상) |
-| B4-f | ECS Service 생성 (Cluster + TaskDef + TG + SG + subnets) | ⏸ | desired=1, public subnets 4 AZ, assignPublicIp=ENABLED 필수(ECR pull + Kakao outbound) |
-| B4-g | 실행 확인 (Task running + TG healthy + `/` 200) | ⏸ | ALB DNS 로 검증 |
-| B5 | ACM 인증서 + Route53 + ALB listener:443 | ⏸ | 운영 도메인 결정 필요. ALB DNS 이름으로 80 검증 가능 |
+| B4-f | ECS Service 생성 (Cluster + TaskDef + TG + SG + subnets) | ✅ | service `naengo-api-server` desired=1, assignPublicIp=ENABLED |
+| B4-g | 실행 확인 (Task running + TG healthy + `/` 200) | ✅ | Task `5da1ffd...` healthy, ALB DNS `/` 200 / `/api/v1/users/me` 401 / `POST /auth/signup` 201 + user_id=4 발급 + Set-Cookie 정상 |
+| B5 | ACM 인증서 + Route53 + ALB listener:443 | ⏸ | 운영 도메인 결정 필요. ALB DNS (`naengo-api-server-alb-176175450...`) 로 80 검증 완료 |
 | B6 | 보안그룹 (B4-d 와 통합 완료) | ✅ | B4-d 에 흡수 |
+| B7 | RDS 사전 점검 | ✅ | DBv5 적용 상태 / Flyway baseline 자동 init / Hibernate validate 통과 |
+| B8 | 첫 배포 검증 | ✅ | signup 201, JWT 발급, 쿠키 Secure+HttpOnly+SameSite=Lax |
 | B7 | **RDS 사전 점검** — V1~V5 적용 가능 상태인지 확인 | ⏸ | **DB 운영 팀원에게 협의 필요** — 우리가 V4(레시피 정규화) + V5(social_accounts 분리) 적용 예정임을 알림. 다른 DDL 충돌 없는지 |
 | B8 | 첫 배포 검증 (Flyway V1~V5 적용 / `/` 200 / signup 201 / 카카오 흐름 B) | ⏸ | [`deploy-env.md §4, §6`](deploy-env.md) |
 
@@ -113,10 +115,13 @@
 
 ## 현재 막힌 지점 / 다음 액션 (우선순위)
 
-1. **B4-f** — ECS Service `naengo-api-server` 생성 (Cluster `naengo` + TaskDef rev 1 + ECS-SG + 4 AZ public subnets + ALB TG 연결, desired=1, assignPublicIp=ENABLED)
-2. **B4-g / B7-B8** — Task running 확인 + ALB DNS (`naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com`) 로 `/` 200 검증 + Flyway V1~V5 적용 로그 확인
-3. **B5** — 운영 도메인 결정 후 ACM 인증서 + Route53 + listener:443
-4. **A2 / B3-c update** — KAKAO_REDIRECT_URI 운영 도메인으로 교체
+🎉 **첫 배포 완료 (2026-05-21)** — ALB DNS `http://naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com/` 정상 응답. signup → user_id=4 발급 + 쿠키 정상.
+
+남은 작업:
+1. **B5 / A2 / A3** — 운영 도메인 결정 후 ACM + Route53 + listener:443 부착 → 그 시점에 `update-secret` 으로 KAKAO_REDIRECT_URI prod 값 교체 + CORS 좁힘
+2. **C3** — AI 와 `JWT_SECRET` 동일 값 합의 → `update-secret naengo/prod/jwt`
+3. **D3** — CloudWatch billing alarm + 5xx 율 + 인증실패 율 monitoring
+4. **D4** — IAM 사용자 권한 좁히기 (현 AdministratorAccess → ECR/Secrets/ECS/RDS-describe 만)
 
 > 운영 도메인이 정해지지 않은 상태에서도 B3/B4 까진 placeholder 로 진행 가능 (KAKAO_REDIRECT_URI 만 임시값). B5(ALB+Route53)는 도메인 필요.
 
@@ -129,3 +134,4 @@
 - 2026-05-21 **B4-f 완료 / B4-g 실패**: Service 생성 + Task RUNNING ✓ / Spring 부팅 실패 (`FlywayException: Found non-empty schema "public" but no schema history table`). 원인: DB 팀원이 운영 RDS 에 DBv5 를 직접 SQL 로 적용 → flyway_schema_history 미생성. ECS Service desired=0 로 실패 루프 중단. **DB 팀원의 DBv5.sql 분석 결과 우리 V1~V5 와 9가지 구조 차이** (users.username/user_identities/user_recipes/PK 타입 등). **옵션 A 결정** — 우리(api-server) 가 DBv5 전면 align (10 phase, ~60~70 파일). C0 합의 → 사실상 무효 (DB 팀원 명명을 우리가 채택).
 - 2026-05-21 **옵션 A Phase 1 완료**: Flyway V1~V5 폐기, 신규 V1 = DBv5.sql 통째(broken index/trigger 2건만 정정), `application-prod.yml` 에 `baseline-on-migrate=true` + `baseline-version="1"` 설정.
 - 2026-05-21 **옵션 A Phase 2~7 완료**: User entity (email→username, deletedAt 제거, Long→Integer) / SocialAccount→UserIdentity (테이블 user_identities, 컬럼명 정합, AuthProvider 4종 확장) / UserProfile (Integer + JSONB NOT NULL DEFAULT) / PendingRecipe→UserRecipe (테이블 user_recipes, URL `/api/v1/[admin/]user-recipes`) / Recipe + 자식 entities + Like/Scrap/Chat Long→Integer ripple / JWT·SecurityUtil Integer / 통합테스트 7 파일 일괄 정합. **Testcontainers 30/30 PASS** (Auth 8 / Cors 4 / ProfileChat 3 / Recipe 6 / RequestId 4 / SocialAuth 5).
+- 2026-05-21 **🎉 첫 운영 배포 성공**: CI 통과 → ECR `:8cbea88...` → Task Definition rev 2 → Service desired=1 force-new-deployment. Spring 부팅 63s, Flyway baseline 자동 init, Tomcat 8080, ALB TG healthy. 검증: `/` 200 + `/api/v1/users/me` 401 + signup 201 (user_id=4 발급 + Secure HttpOnly 쿠키). B4/B6/B7/B8 모두 완료. 남은: B5(도메인+ACM+Route53+443), A2/B3-c update(KAKAO redirect URI), A3(CORS 좁힘), C3(AI JWT 공유), D3/D4(모니터링·IAM 좁힘).
