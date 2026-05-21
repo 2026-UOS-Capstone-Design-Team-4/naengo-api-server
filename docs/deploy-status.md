@@ -31,6 +31,10 @@
 | ALB SG | `sg-0f143ba6a8d9997d2` (`naengo-api-server-alb-sg`, inbound 80 from 0.0.0.0/0) |
 | ECS task SG | `sg-0001862a6ba20c4cf` (`naengo-api-server-ecs-sg`, inbound 8080 from ALB SG) |
 | RDS SG | `sg-0898460971d5b8d04` (inbound 5432 from `ec2-rds-1` + 우리 ECS SG) |
+| ALB ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:loadbalancer/app/naengo-api-server-alb/159ba31da2dc086e` |
+| **ALB DNS** | **`naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com`** (도메인 부착 전 검증용 — `http://<이 호스트>/` 로 접근) |
+| Target Group ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:targetgroup/naengo-api-server-tg/1303d640c7a0ed98` (HTTP 8080, target-type ip, health check `/`) |
+| Listener:80 ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:listener/app/naengo-api-server-alb/159ba31da2dc086e/bebdb0686756e3b2` |
 | 운영 도메인 (`api.???`) | (미정) |
 | 카카오 운영 redirect URI | (미정) — 운영 도메인 결정 후 |
 | Secrets Manager ARN | `naengo/prod/db` = `arn:aws:secretsmanager:ap-northeast-2:518056141724:secret:naengo/prod/db-iUa2In` |
@@ -73,9 +77,9 @@
 | B4-b | Task Execution Role + Secrets fetch 권한 + Log Group | ✅ | `ecsTaskExecutionRole` + inline `naengo-secrets-fetch` + `/ecs/naengo-api-server` |
 | B4-c | Task Definition 등록 (rev 1) | ✅ | image SHA pin `63bab5b9...`, cpu/mem 512/1024, env 2 + secrets 6, awslogs |
 | B4-d | 보안그룹 3변경 (ALB SG / ECS SG / RDS SG inbound) | ✅ | ALB-SG 80 from internet, ECS-SG 8080 from ALB-SG, RDS-SG 5432 from ECS-SG (기존 ec2-rds-1 보존) |
-| B4-e | ALB + Target Group + listener:80 | ⏸ | TG 헬스체크 path=`/`, ECS Service 와 연결 |
-| B4-f | ECS Service 생성 (Cluster + TaskDef + TG + SG + subnets) | ⏸ | desired=1, public subnets 4 AZ |
-| B4-g | 실행 확인 (Task running + TG healthy + `/` 200) | ⏸ | |
+| B4-e | ALB + Target Group + listener:80 | ✅ | ALB DNS / TG / Listener ARN §0. TG targets 비어 있음 (Service 미생성, 정상) |
+| B4-f | ECS Service 생성 (Cluster + TaskDef + TG + SG + subnets) | ⏸ | desired=1, public subnets 4 AZ, assignPublicIp=ENABLED 필수(ECR pull + Kakao outbound) |
+| B4-g | 실행 확인 (Task running + TG healthy + `/` 200) | ⏸ | ALB DNS 로 검증 |
 | B5 | ACM 인증서 + Route53 + ALB listener:443 | ⏸ | 운영 도메인 결정 필요. ALB DNS 이름으로 80 검증 가능 |
 | B6 | 보안그룹 (B4-d 와 통합 완료) | ✅ | B4-d 에 흡수 |
 | B7 | **RDS 사전 점검** — V1~V5 적용 가능 상태인지 확인 | ⏸ | **DB 운영 팀원에게 협의 필요** — 우리가 V4(레시피 정규화) + V5(social_accounts 분리) 적용 예정임을 알림. 다른 DDL 충돌 없는지 |
@@ -109,11 +113,10 @@
 
 ## 현재 막힌 지점 / 다음 액션 (우선순위)
 
-1. **B4-e** — ALB + Target Group (8080, health check `/`) + listener:80
-2. **B4-f** — ECS Service 생성 (Cluster `naengo` + TaskDef rev 1 + ECS-SG + 4 AZ public subnets + ALB TG 연결)
-3. **B4-g / B7-B8** — Task running 확인 + ALB DNS 로 `/` 200 검증 + Flyway V1~V5 적용 로그 확인
-4. **B5** — 운영 도메인 결정 후 ACM 인증서 + Route53 + listener:443
-5. **A2 / B3-c update** — KAKAO_REDIRECT_URI 운영 도메인으로 교체
+1. **B4-f** — ECS Service `naengo-api-server` 생성 (Cluster `naengo` + TaskDef rev 1 + ECS-SG + 4 AZ public subnets + ALB TG 연결, desired=1, assignPublicIp=ENABLED)
+2. **B4-g / B7-B8** — Task running 확인 + ALB DNS (`naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com`) 로 `/` 200 검증 + Flyway V1~V5 적용 로그 확인
+3. **B5** — 운영 도메인 결정 후 ACM 인증서 + Route53 + listener:443
+4. **A2 / B3-c update** — KAKAO_REDIRECT_URI 운영 도메인으로 교체
 
 > 운영 도메인이 정해지지 않은 상태에서도 B3/B4 까진 placeholder 로 진행 가능 (KAKAO_REDIRECT_URI 만 임시값). B5(ALB+Route53)는 도메인 필요.
 
@@ -122,3 +125,4 @@
 - 2026-05-21 신설. B1 완료, A4 commit `1eaf4da`. B2 CI 1차 시도 — test ✓ / build-push 가 OIDC AssumeRole 실패(trust policy sub placeholder). trust 정정 후 재실행 attempt 2 — OIDC ✓ / build-push 가 `useradd exit 4` (UID 1000 충돌) 실패. Dockerfile UID/GID 10001 로 정정 + A6 Spring Initializr 디폴트 정정 동시 진행.
 - 2026-05-21 B2 완료 (CI 통과, ECR 에 이미지 누적). C0 합의 완료. **B3 Secrets Manager 3종 생성 완료** (db/jwt/kakao). JWT 와 KAKAO_REDIRECT_URI 는 추후 `update-secret` 필요.
 - 2026-05-21 **B4-a/b/c/d 완료**: Cluster `naengo` + Execution Role + Log Group + Task Definition rev 1 (SHA pin `63bab5b9...`, 0.5vCPU/1GB) + SG 3변경 (ALB SG / ECS SG / RDS SG inbound 에 ECS SG 추가). VPC 토폴로지: default VPC + 4 AZ public subnets 사용. 다음: B4-e (ALB+TG) → B4-f (Service).
+- 2026-05-21 **B4-e 완료**: TG (HTTP 8080, target-type ip, health check `/`) + ALB (internet-facing, 4 AZ, ALB-SG) + listener:80. ALB DNS = `naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com`. TG targets 비어 있음 (Service 미생성). 다음: B4-f.
