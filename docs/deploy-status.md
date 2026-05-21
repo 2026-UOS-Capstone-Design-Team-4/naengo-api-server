@@ -35,6 +35,9 @@
 | **ALB DNS** | **`naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com`** (도메인 부착 전 검증용 — `http://<이 호스트>/` 로 접근) |
 | Target Group ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:targetgroup/naengo-api-server-tg/1303d640c7a0ed98` (HTTP 8080, target-type ip, health check `/`) |
 | Listener:80 ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:listener/app/naengo-api-server-alb/159ba31da2dc086e/bebdb0686756e3b2` |
+| SNS billing topic | `arn:aws:sns:us-east-1:518056141724:naengo-billing-alerts` (subscription: ppoobb94471@gmail.com, PendingConfirmation) |
+| SNS ops topic | `arn:aws:sns:ap-northeast-2:518056141724:naengo-ops-alerts` (subscription: ppoobb94471@gmail.com, PendingConfirmation) |
+| CloudWatch alarms (4종) | `naengo-billing-over-20-usd`(us-east-1) / `naengo-alb-target-5xx` / `naengo-tg-unhealthy-host` / `naengo-rds-cpu-high`(ap-northeast-2) |
 | 운영 도메인 (`api.???`) | (미정) |
 | 카카오 운영 redirect URI | (미정) — 운영 도메인 결정 후 |
 | Secrets Manager ARN | `naengo/prod/db` = `arn:aws:secretsmanager:ap-northeast-2:518056141724:secret:naengo/prod/db-iUa2In` |
@@ -107,7 +110,7 @@
 |---|---|---|---|
 | D1 | `.env` 평문 secret → Secrets Manager 이관 후 로컬 `.env` 에선 dev-only 값 또는 제거 | ⏸ | B3 와 함께 |
 | D2 | CORS 좁힘 (= A3) | ⏸ | |
-| D3 | CloudWatch billing alarm + 5xx 율 + 인증실패 율 모니터링 | ⏸ | 첫 배포 후 |
+| D3 | CloudWatch alarm 4종 + SNS 이메일 알림 | 🟡 | 생성 완료 (billing $20 / ALB 5xx>5/5m / TG UnHealthyHost / RDS CPU>80%). **사용자 confirm 2건 대기** — SNS 가입 메일 (us-east-1 + ap-northeast-2 별도) "Confirm subscription" 클릭 + AWS billing prefs 의 "Receive CloudWatch billing alerts" ON 필요. 그 후 ✅. 인증 실패 율 (Logs metric filter) 등 추가는 별도 |
 | D4 | IAM 사용자 권한 좁히기 (현재 AdministratorAccess) | ⏸ | 첫 배포 안정화 후 ECR/Secrets/ECS/RDS-describe 만 가진 좁은 policy 로 |
 | D5 | IAM 사용자 MFA 활성화 | ⏸ | |
 
