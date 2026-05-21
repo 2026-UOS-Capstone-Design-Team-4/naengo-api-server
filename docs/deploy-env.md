@@ -35,8 +35,8 @@ SPRING_PROFILES_ACTIVE=prod
 
 ## 4. 부팅 검증 절차 (배포 후 1회)
 
-1. 기동 로그: `Started ApiServerApplication` + `Flyway ... Successfully applied N migrations` (V1~V5 — V4 는 레시피 정규화, V5 는 users/social_accounts 분리, 모두 2026-05-19) 확인.
-   - ⚠️ V4/V5 첫 적용 전 RDS 현 스키마 상태 점검 필수. 이미 다른 DDL(예: naengo-ai schema.sql / 변형된 users 컬럼) 이 적용돼 있으면 `DROP TABLE`/`DROP COLUMN` 가 충돌 — 사전 백업/조율 후 진행.
+1. 기동 로그: `Started ApiServerApplication` + Flyway 가 `baseline-on-migrate=true` 로 `flyway_schema_history` 생성 후 `Schema is up to date. No migration necessary.` 확인 (옵션 A 채택 2026-05-21 — V1=DBv5 단일, 운영 RDS 이미 DBv5 적용 상태).
+   - 신규 V2+ 마이그레이션을 우리가 추가하기 전엔 첫 부팅에서 baseline 만 INSERT 되고 끝. dev/test 는 처음부터 V1 적용 (Testcontainers 자동).
    - `Could not resolve placeholder 'XXX'` → §2 필수 env 누락. 주입 후 재기동.
    - `password authentication failed` → DB 자격증명/RDS 보안그룹 확인.
 2. 헬스: `curl https://<운영도메인>/health` → `{"status":"UP"}`.

@@ -1,8 +1,13 @@
 # DB 동작 수동 검증 가이드
 
+> ⚠️ **STALE (2026-05-21 옵션 A 채택 이전)**. 본 가이드의 다수 SQL 예시·테이블 가정
+> (`pending_recipes`, `users.deleted_at`, `users.email`, BIGSERIAL 등) 는 옵션 A
+> 채택으로 사문화됨. 현행 스키마는 [`README.md §3`](README.md) + V1__init.sql 참조.
+> 로컬 Postgres 기동/Flyway 검증 같은 운영 절차 부분은 여전히 유효하나 SQL 예시는
+> 그대로 사용하지 말 것. 다음 정식 갱신 시 V1=DBv5 기준으로 재작성 예정.
+
 > **위치**: Step 8 에서 JUnit 통합 테스트로 자동화하기 전, **수동으로** 돌려 확신을 얻기 위한 체크리스트.
 > **선결**: `docker compose up -d` 로 로컬 Postgres(pgvector) 가 기동 중이어야 한다.
-> **AI 서버 contract 가 닿는 테이블** (`recipes.embedding`, `chat_rooms`, `chat_messages`) 의 검증 항목은 [AI 서버 OpenAPI](http://43.201.62.254:8000/docs) (로컬 스냅샷: [`api-1.json`](api-1.json)) 와 대조하며 본다. 본 가이드의 기대값과 docs 가 어긋나면 docs 가 우선.
 
 모든 커맨드는 저장소 루트에서 실행한다고 가정한다.
 

@@ -56,7 +56,7 @@ Spring Boot 4 + Jackson 3 환경에서는 `com.fasterxml.jackson.databind.Object
 ## 4. 회귀 테스트
 
 - [x] 토큰 없이 `GET /api/users/me` → **401** + `{"message":"로그인이 필요합니다.","success":false}`
-- [x] USER 토큰으로 `GET /api/admin/pending-recipes` → **403** + `{"message":"접근 권한이 없습니다.","success":false}`
+- [x] USER 토큰으로 `GET /api/v1/admin/user-recipes` → **403** + `ErrorResponse` (옵션 A 채택 2026-05-21 — 경로 정정)
 - [x] 정상 인증 + 인가 → 기존과 동일하게 200
 - [x] 잘못된 / 만료된 토큰 → 401 (`JwtAuthenticationFilter` 가 SecurityContext 비우면 EntryPoint 가 발화)
 

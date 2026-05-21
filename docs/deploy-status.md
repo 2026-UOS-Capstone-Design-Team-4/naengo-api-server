@@ -84,7 +84,7 @@
 | B6 | 보안그룹 (B4-d 와 통합 완료) | ✅ | B4-d 에 흡수 |
 | B7 | RDS 사전 점검 | ✅ | DBv5 적용 상태 / Flyway baseline 자동 init / Hibernate validate 통과 |
 | B8 | 첫 배포 검증 | ✅ | signup 201, JWT 발급, 쿠키 Secure+HttpOnly+SameSite=Lax |
-| B7 | **RDS 사전 점검** — V1~V5 적용 가능 상태인지 확인 | ⏸ | **DB 운영 팀원에게 협의 필요** — 우리가 V4(레시피 정규화) + V5(social_accounts 분리) 적용 예정임을 알림. 다른 DDL 충돌 없는지 |
+| B7 | RDS 사전 점검 | ✅ | 옵션 A 채택으로 우리 V1=DBv5. 운영 RDS 가 이미 DBv5 적용 상태라 `baseline-on-migrate=true` 가 자동 baseline INSERT + migrate skip. 부팅 검증됨 |
 | B8 | 첫 배포 검증 (Flyway V1~V5 적용 / `/` 200 / signup 201 / 카카오 흐름 B) | ⏸ | [`deploy-env.md §4, §6`](deploy-env.md) |
 
 ---

@@ -9,7 +9,7 @@
 ## 1. 배경
 
 - `chat_rooms` / `chat_messages` 는 **AI 서버가 메시지 primary writer** (SSE 채팅 누적). DDL 은 API 서버 Flyway 관리, `chat_rooms.is_active` soft delete write 는 API 서버 권한(PR-7 / D-6 합의안).
-- 회원 탈퇴(`DELETE /api/v1/users/me`)는 `users` 행을 **삭제하지 않고 익명화**(PII nullify + `is_active=false`, `is_blocked=true`, `deleted_at`) — `recipes.author_id` 정합 보존 목적. 따라서 `users` FK `ON DELETE CASCADE` 가 발화하지 않아 chat 행이 자동 정리되지 않음.
+- 회원 탈퇴(`DELETE /api/v1/users/me`)는 `users` 행을 **삭제하지 않고 익명화**(PII nullify(`username`/`password_hash`) + `is_active=false`, `is_blocked=true`) — `recipes.author_id` 정합 보존 목적. 따라서 `users` FK `ON DELETE CASCADE` 가 발화하지 않아 chat 행이 자동 정리되지 않음. (옵션 A 채택 2026-05-21 — `deleted_at` 컬럼 없음, `is_active=false` 가 탈퇴 표식 단일화)
 
 ## 2. 현재 상태 (API 서버, 적용 완료)
 

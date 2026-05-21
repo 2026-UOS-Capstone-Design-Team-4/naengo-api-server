@@ -1,5 +1,13 @@
 # API 서버 담당자 작업 정리
 
+> ⚠️ **부분 STALE (2026-05-21 옵션 A 채택 이전)**. 본 문서의 다수 Step/PR 항목
+> (Step 6 PR-1~7, User 인증, V1~V5 마이그레이션, pending_recipes 도메인 등) 는 옵션 A
+> 채택으로 사문화되거나 폐기됨. 현행 진실원본:
+>   - 운영 contract → [`auth-user-api.md`](auth-user-api.md) + [`changes/2026-05-21-option-a-contract-diff.md`](changes/2026-05-21-option-a-contract-diff.md)
+>   - 배포/인프라 진척 → [`deploy-status.md`](deploy-status.md)
+>   - DB 스키마 → [`README.md §3`](README.md) + V1__init.sql
+> 본 문서는 history 자료로만 본다. 다음 정식 갱신 시 옵션 A 후 task 카탈로그로 재작성 예정.
+
 > 본 문서는 **API 서버(=naengo-api-server)** 담당자가 무엇을 해야 하는지 정리한 체크리스트다.
 > AI 서버 / 프론트엔드 담당자는 자신의 영역과 인터페이스만 참고하면 된다.
 
