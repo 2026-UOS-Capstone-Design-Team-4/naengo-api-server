@@ -31,13 +31,13 @@ public class Scrap {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "scrap_id")
-    private Long scrapId;
+    private Integer scrapId;
 
     @Column(name = "user_id", nullable = false)
-    private Long userId;
+    private Integer userId;
 
     @Column(name = "recipe_id", nullable = false)
-    private Long recipeId;
+    private Integer recipeId;
 
     @Column(name = "created_at", updatable = false)
     @Builder.Default

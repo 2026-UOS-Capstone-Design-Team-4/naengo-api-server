@@ -35,18 +35,18 @@ public class ChatController {
     }
 
     @GetMapping("/rooms/{roomId}")
-    public List<ChatMessageResponse> listMessages(@PathVariable Long roomId) {
+    public List<ChatMessageResponse> listMessages(@PathVariable Integer roomId) {
         return chatService.listMessages(currentUserId(), roomId);
     }
 
     @DeleteMapping("/rooms/{roomId}")
-    public Map<String, String> deleteRoom(@PathVariable Long roomId) {
+    public Map<String, String> deleteRoom(@PathVariable Integer roomId) {
         chatService.deleteRoom(currentUserId(), roomId);
         return Map.of("message", "채팅방이 삭제되었습니다.");
     }
 
-    private Long currentUserId() {
-        Long userId = SecurityUtil.currentUserIdOrNull();
+    private Integer currentUserId() {
+        Integer userId = SecurityUtil.currentUserIdOrNull();
         if (userId == null) throw new CustomException(ErrorCode.UNAUTHORIZED);
         return userId;
     }

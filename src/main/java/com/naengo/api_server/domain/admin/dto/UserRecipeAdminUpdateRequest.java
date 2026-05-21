@@ -11,12 +11,12 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 관리자 제출 레시피 수정 — api-3.json {@code PendingRecipeAdminUpdate} 정합.
+ * 관리자 제출 레시피 수정 — api-3.json {@code UserRecipeAdminUpdate} 정합.
  *
  * <p>모든 필드 선택. 전달하지 않은(=null) 필드는 변경하지 않는다 (PATCH 시맨틱).
  * 요청 키는 api-3.json snake_case ({@code @JsonProperty}).
  */
-public record PendingRecipeAdminUpdateRequest(
+public record UserRecipeAdminUpdateRequest(
         @JsonProperty("title") @Size(max = 255) String title,
         @JsonProperty("content") @Size(max = 10000) String content,
         @JsonProperty("description") @Size(max = 1000) String description,

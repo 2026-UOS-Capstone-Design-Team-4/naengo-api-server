@@ -25,10 +25,10 @@ public class ChatMessage {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "message_id")
-    private Long messageId;
+    private Integer messageId;
 
     @Column(name = "room_id", nullable = false)
-    private Long roomId;
+    private Integer roomId;
 
     /** "user" | "model" */
     @Column(nullable = false, length = 20)
@@ -40,7 +40,7 @@ public class ChatMessage {
     /** 추천된 레시피 ID 배열. NULL 가능. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "recipe_ids", columnDefinition = "jsonb")
-    private List<Long> recipeIds;
+    private List<Integer> recipeIds;
 
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;

@@ -2,7 +2,7 @@ package com.naengo.api_server.domain.user.service;
 
 import com.naengo.api_server.domain.chat.repository.ChatRoomRepository;
 import com.naengo.api_server.domain.like.repository.LikeRepository;
-import com.naengo.api_server.domain.recipe.repository.PendingRecipeRepository;
+import com.naengo.api_server.domain.recipe.repository.UserRecipeRepository;
 import com.naengo.api_server.domain.scrap.repository.ScrapRepository;
 import com.naengo.api_server.domain.user.dto.PasswordChangeRequest;
 import com.naengo.api_server.domain.user.dto.UserInputUpdateRequest;
@@ -14,7 +14,7 @@ import com.naengo.api_server.domain.user.dto.UserUpdateRequest;
 import com.naengo.api_server.domain.user.entity.AuthProvider;
 import com.naengo.api_server.domain.user.entity.User;
 import com.naengo.api_server.domain.user.entity.UserProfile;
-import com.naengo.api_server.domain.user.repository.SocialAccountRepository;
+import com.naengo.api_server.domain.user.repository.UserIdentityRepository;
 import com.naengo.api_server.domain.user.repository.UserProfileRepository;
 import com.naengo.api_server.domain.user.repository.UserRepository;
 import com.naengo.api_server.global.exception.CustomException;
@@ -35,7 +35,7 @@ import java.util.List;
  * <ul>
  *   <li>{@code users} 행 보존 + PII nullify + 닉네임 꼬리표 + flag 토글 + deleted_at</li>
  *   <li>{@code scraps} / {@code likes} 삭제 → DB 트리거가 recipe_stats 카운터 자동 감소</li>
- *   <li>{@code pending_recipes} / {@code user_profiles} 삭제 (PII 가능성)</li>
+ *   <li>{@code user_recipes} / {@code user_profiles} 삭제 (PII 가능성)</li>
  *   <li>{@code recipes} 보존 (응답 시점에 닉네임 치환)</li>
  *   <li>{@code chat_rooms} soft delete(`is_active=false`) — 우리 권한 내(PR-7/D-6) 무충돌.
  *       {@code chat_messages} 본문 PII 스크럽/hard delete 는 AI 서버(메시지 primary writer)
@@ -48,22 +48,22 @@ public class UserMeService {
 
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
-    private final SocialAccountRepository socialAccountRepository;
+    private final UserIdentityRepository userIdentityRepository;
     private final LikeRepository likeRepository;
     private final ScrapRepository scrapRepository;
-    private final PendingRecipeRepository pendingRecipeRepository;
+    private final UserRecipeRepository userRecipeRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
 
     @Transactional(readOnly = true)
-    public UserMeResponse getMe(Long userId) {
+    public UserMeResponse getMe(Integer userId) {
         User user = loadActiveUser(userId);
         return UserMeResponse.from(user, resolveProvider(userId));
     }
 
     @Transactional
-    public UserMeResponse updateMe(Long userId, UserUpdateRequest request) {
+    public UserMeResponse updateMe(Integer userId, UserUpdateRequest request) {
         User user = loadActiveUser(userId);
 
         if (!user.getNickname().equals(request.nickname())
@@ -76,7 +76,7 @@ public class UserMeService {
     }
 
     @Transactional
-    public void changePassword(Long userId, PasswordChangeRequest request) {
+    public void changePassword(Integer userId, PasswordChangeRequest request) {
         User user = loadActiveUser(userId);
 
         // V5: provider 컬럼 제거 — "password 가 없는 사용자(=소셜 전용 가입자)" 로 판정.
@@ -95,8 +95,8 @@ public class UserMeService {
      * 응답의 provider 표기 결정 — social_accounts 에 row 있으면 그 provider, 없으면 LOCAL.
      * 현 정책상 user 당 0~1 link 이므로 첫 번째 행을 채택.
      */
-    private AuthProvider resolveProvider(Long userId) {
-        return socialAccountRepository.findByUserId(userId).stream()
+    private AuthProvider resolveProvider(Integer userId) {
+        return userIdentityRepository.findByUserId(userId).stream()
                 .findFirst()
                 .map(sa -> AuthProvider.valueOf(sa.getProvider()))
                 .orElse(AuthProvider.LOCAL);
@@ -104,7 +104,7 @@ public class UserMeService {
 
     /** api-3.json `GET /api/v1/users/me/profile` — user_input 만. row 없으면 빈 배열. */
     @Transactional(readOnly = true)
-    public UserProfileResponse getProfile(Long userId) {
+    public UserProfileResponse getProfile(Integer userId) {
         loadActiveUser(userId);
         return userProfileRepository.findById(userId)
                 .map(p -> UserProfileResponse.of(p.getUserInput()))
@@ -113,7 +113,7 @@ public class UserMeService {
 
     /** api-3.json `PATCH /api/v1/users/me/profile` — user_input 전체 교체. row 없으면 INSERT. */
     @Transactional
-    public UserProfileResponse replaceUserInput(Long userId, UserInputUpdateRequest request) {
+    public UserProfileResponse replaceUserInput(Integer userId, UserInputUpdateRequest request) {
         loadActiveUser(userId);
         UserProfile profile = userProfileRepository.findById(userId)
                 .orElseGet(() -> userProfileRepository.save(UserProfile.empty(userId)));
@@ -123,7 +123,7 @@ public class UserMeService {
 
     /** 확장 — AI 분석 포함 선호도 조회 (`GET /api/v1/users/me/preferences`). row 없으면 빈 default. */
     @Transactional(readOnly = true)
-    public UserPreferencesResponse getPreferences(Long userId) {
+    public UserPreferencesResponse getPreferences(Integer userId) {
         loadActiveUser(userId);
         UserProfile profile = userProfileRepository.findById(userId)
                 .orElseGet(() -> UserProfile.empty(userId));
@@ -132,7 +132,7 @@ public class UserMeService {
 
     /** SPEC-20260504-05 — 선호도 갱신 (직접 입력 영역만). row 없으면 INSERT. */
     @Transactional
-    public UserPreferencesResponse updatePreferences(Long userId, UserPreferencesUpdateRequest request) {
+    public UserPreferencesResponse updatePreferences(Integer userId, UserPreferencesUpdateRequest request) {
         loadActiveUser(userId);
         UserProfile profile = userProfileRepository.findById(userId)
                 .orElseGet(() -> userProfileRepository.save(UserProfile.empty(userId)));
@@ -147,21 +147,21 @@ public class UserMeService {
     }
 
     @Transactional
-    public void withdraw(Long userId) {
+    public void withdraw(Integer userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
 
-        if (user.getDeletedAt() != null) {
+        if (!user.isActive()) {
             throw new CustomException(ErrorCode.ALREADY_WITHDRAWN);
         }
 
         // 1) 부속 데이터 삭제 — DB 트리거가 recipe_stats 카운터 자동 감소
         likeRepository.deleteAllByUserId(userId);
         scrapRepository.deleteAllByUserId(userId);
-        pendingRecipeRepository.deleteAllByUserId(userId);
+        userRecipeRepository.deleteAllByUserId(userId);
         userProfileRepository.deleteAllByUserId(userId);
         // V5: 소셜 link 도 함께 제거 — 같은 외부 계정이 다시 가입할 때 신규 user 로 분리
-        socialAccountRepository.deleteAllByUserId(userId);
+        userIdentityRepository.deleteAllByUserId(userId);
 
         // 2) 채팅방 soft delete (우리 권한 내, 무충돌). 메시지 본문 PII 스크럽은 AI 합의 후 승격.
         chatRoomRepository.deactivateAllByUserId(userId);
@@ -173,10 +173,10 @@ public class UserMeService {
         entityManager.flush();
     }
 
-    private User loadActiveUser(Long userId) {
+    private User loadActiveUser(Integer userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
-        if (user.getDeletedAt() != null) {
+        if (!user.isActive()) {
             // 탈퇴된 사용자가 살아있는 토큰으로 호출한 비정상 케이스
             throw new CustomException(ErrorCode.ALREADY_WITHDRAWN);
         }

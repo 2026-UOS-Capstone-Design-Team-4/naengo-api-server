@@ -23,17 +23,17 @@ public class LikeController {
     private final LikeService likeService;
 
     @PostMapping("/{id}/likes")
-    public RecipeStatsResponse like(@PathVariable Long id) {
+    public RecipeStatsResponse like(@PathVariable Integer id) {
         return likeService.like(currentUserId(), id);
     }
 
     @DeleteMapping("/{id}/likes")
-    public RecipeStatsResponse unlike(@PathVariable Long id) {
+    public RecipeStatsResponse unlike(@PathVariable Integer id) {
         return likeService.unlike(currentUserId(), id);
     }
 
-    private Long currentUserId() {
-        Long userId = SecurityUtil.currentUserIdOrNull();
+    private Integer currentUserId() {
+        Integer userId = SecurityUtil.currentUserIdOrNull();
         if (userId == null) throw new CustomException(ErrorCode.UNAUTHORIZED);
         return userId;
     }

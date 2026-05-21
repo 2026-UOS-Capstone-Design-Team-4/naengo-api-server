@@ -31,7 +31,7 @@ public class LikeService {
 
     /** 좋아요 추가. 이미 눌렀으면 409 ALREADY_LIKED. */
     @Transactional
-    public RecipeStatsResponse like(Long userId, Long recipeId) {
+    public RecipeStatsResponse like(Integer userId, Integer recipeId) {
         requireActiveRecipe(recipeId);
 
         if (likeRepository.existsByUserIdAndRecipeId(userId, recipeId)) {
@@ -51,7 +51,7 @@ public class LikeService {
 
     /** 좋아요 취소. 누르지 않았으면 409 NOT_LIKED. */
     @Transactional
-    public RecipeStatsResponse unlike(Long userId, Long recipeId) {
+    public RecipeStatsResponse unlike(Integer userId, Integer recipeId) {
         requireActiveRecipe(recipeId);
 
         int deleted = likeRepository.deleteByUserIdAndRecipeId(userId, recipeId);
@@ -63,7 +63,7 @@ public class LikeService {
 
     // ─── 내부 ─────────────────────────────────────────────
 
-    private void requireActiveRecipe(Long recipeId) {
+    private void requireActiveRecipe(Integer recipeId) {
         Recipe recipe = recipeRepository.findById(recipeId)
                 .orElseThrow(() -> new CustomException(ErrorCode.RECIPE_NOT_FOUND));
         if (!recipe.isActive()) {
@@ -71,7 +71,7 @@ public class LikeService {
         }
     }
 
-    private RecipeStatsResponse currentStats(Long recipeId) {
+    private RecipeStatsResponse currentStats(Integer recipeId) {
         // 트리거가 recipe_stats 를 갱신하도록 강제 flush 후 재조회
         entityManager.flush();
         entityManager.clear();

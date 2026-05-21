@@ -1,10 +1,10 @@
 package com.naengo.api_server.domain.recipe.service;
 
-import com.naengo.api_server.domain.recipe.dto.PendingRecipeCreateRequest;
-import com.naengo.api_server.domain.recipe.dto.PendingRecipeResponse;
-import com.naengo.api_server.domain.recipe.entity.PendingRecipe;
+import com.naengo.api_server.domain.recipe.dto.UserRecipeCreateRequest;
+import com.naengo.api_server.domain.recipe.dto.UserRecipeResponse;
+import com.naengo.api_server.domain.recipe.entity.UserRecipe;
 import com.naengo.api_server.domain.recipe.entity.RecipeDraft;
-import com.naengo.api_server.domain.recipe.repository.PendingRecipeRepository;
+import com.naengo.api_server.domain.recipe.repository.UserRecipeRepository;
 import com.naengo.api_server.global.exception.CustomException;
 import com.naengo.api_server.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -16,22 +16,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 사용자 제출 레시피 (pending_recipes) — 제출 / 본인 목록·단건 / soft delete.
+ * 사용자 제출 레시피 (user_recipes) — 제출 / 본인 목록·단건 / soft delete.
  *
- * <p>api-3.json `/api/v1/pending-recipes` 정합. 승인(→recipes 승격)·반려는 Admin 책임.
+ * <p>api-3.json `/api/v1/user-recipes` 정합. 승인(→recipes 승격)·반려는 Admin 책임.
  */
 @Service
 @RequiredArgsConstructor
-public class PendingRecipeService {
+public class UserRecipeService {
 
-    private final PendingRecipeRepository pendingRecipeRepository;
+    private final UserRecipeRepository userRecipeRepository;
 
     @Value("${aws.s3.public-url-prefix:}")
     private String s3PublicUrlPrefix;
 
-    /** 레시피 제출 → pending_recipes INSERT. status=PENDING. */
+    /** 레시피 제출 → user_recipes INSERT. status=PENDING. */
     @Transactional
-    public PendingRecipeResponse create(Long userId, PendingRecipeCreateRequest request) {
+    public UserRecipeResponse create(Integer userId, UserRecipeCreateRequest request) {
         validateImageUrl(request.imageUrl());
 
         RecipeDraft draft = RecipeDraft.builder()
@@ -50,7 +50,7 @@ public class PendingRecipeService {
                 .imageUrl(request.imageUrl())
                 .build();
 
-        PendingRecipe pending = PendingRecipe.builder()
+        UserRecipe pending = UserRecipe.builder()
                 .userId(userId)
                 .title(request.title())
                 .submissionText(request.content())
@@ -58,24 +58,24 @@ public class PendingRecipeService {
                 .aiSuggestedPatch(RecipeDraft.empty())
                 .build();
 
-        return PendingRecipeResponse.from(pendingRecipeRepository.save(pending));
+        return UserRecipeResponse.from(userRecipeRepository.save(pending));
     }
 
     /** 본인 제출 목록 — is_active=true, 최신순. 단순 배열. */
     @Transactional(readOnly = true)
-    public List<PendingRecipeResponse> listMine(Long userId) {
-        return pendingRecipeRepository.findActiveByUserOrderByLatest(userId).stream()
-                .map(PendingRecipeResponse::from)
+    public List<UserRecipeResponse> listMine(Integer userId) {
+        return userRecipeRepository.findActiveByUserOrderByLatest(userId).stream()
+                .map(UserRecipeResponse::from)
                 .toList();
     }
 
     /** 본인 제출 단건. 없거나 타인 소유거나 삭제됨이면 404. */
     @Transactional(readOnly = true)
-    public PendingRecipeResponse getMine(Long userId, Long pendingRecipeId) {
-        PendingRecipe p = pendingRecipeRepository
-                .findActiveByIdAndUser(pendingRecipeId, userId)
+    public UserRecipeResponse getMine(Integer userId, Integer userRecipeId) {
+        UserRecipe p = userRecipeRepository
+                .findActiveByIdAndUser(userRecipeId, userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.PENDING_RECIPE_NOT_FOUND));
-        return PendingRecipeResponse.from(p);
+        return UserRecipeResponse.from(p);
     }
 
     /**
@@ -83,9 +83,9 @@ public class PendingRecipeService {
      * 이미 삭제됐거나 타인 소유면 404 (존재 노출 방지 + api-3.json 정합).
      */
     @Transactional
-    public void softDelete(Long userId, Long pendingRecipeId) {
-        PendingRecipe p = pendingRecipeRepository
-                .findActiveByIdAndUser(pendingRecipeId, userId)
+    public void softDelete(Integer userId, Integer userRecipeId) {
+        UserRecipe p = userRecipeRepository
+                .findActiveByIdAndUser(userRecipeId, userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.PENDING_RECIPE_NOT_FOUND));
         p.cancel(); // is_active = false
     }

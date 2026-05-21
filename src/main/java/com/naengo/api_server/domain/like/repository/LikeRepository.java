@@ -9,20 +9,20 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 
-public interface LikeRepository extends JpaRepository<Like, Long> {
+public interface LikeRepository extends JpaRepository<Like, Integer> {
 
-    boolean existsByUserIdAndRecipeId(Long userId, Long recipeId);
+    boolean existsByUserIdAndRecipeId(Integer userId, Integer recipeId);
 
     /** 주어진 recipeId 집합 중 사용자가 좋아요한 것만. is_liked 일괄 계산용. */
     @Query("SELECT l.recipeId FROM Like l WHERE l.userId = :userId AND l.recipeId IN :ids")
-    List<Long> findLikedRecipeIds(@Param("userId") Long userId,
-                                  @Param("ids") Collection<Long> ids);
+    List<Integer> findLikedRecipeIds(@Param("userId") Integer userId,
+                                  @Param("ids") Collection<Integer> ids);
 
     @Modifying
     @Query("DELETE FROM Like l WHERE l.userId = :userId AND l.recipeId = :recipeId")
-    int deleteByUserIdAndRecipeId(@Param("userId") Long userId, @Param("recipeId") Long recipeId);
+    int deleteByUserIdAndRecipeId(@Param("userId") Integer userId, @Param("recipeId") Integer recipeId);
 
     @Modifying
     @Query("DELETE FROM Like l WHERE l.userId = :userId")
-    int deleteAllByUserId(@Param("userId") Long userId);
+    int deleteAllByUserId(@Param("userId") Integer userId);
 }

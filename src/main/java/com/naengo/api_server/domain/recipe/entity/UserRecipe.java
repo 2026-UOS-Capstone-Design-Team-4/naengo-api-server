@@ -23,20 +23,20 @@ import java.util.List;
  * draft_payload 와 submission_text 위에 평면 뷰를 제공한다.
  */
 @Entity
-@Table(name = "pending_recipes")
+@Table(name = "user_recipes")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
-public class PendingRecipe {
+public class UserRecipe {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "pending_recipe_id")
-    private Long pendingRecipeId;
+    @Column(name = "user_recipe_id")
+    private Integer userRecipeId;
 
     @Column(name = "user_id", nullable = false)
-    private Long userId;
+    private Integer userId;
 
     @Column(nullable = false, length = 255)
     private String title;
@@ -80,13 +80,13 @@ public class PendingRecipe {
     private String rejectionReason;
 
     @Column(name = "reviewed_by")
-    private Long reviewedBy;
+    private Integer reviewedBy;
 
     @Column(name = "reviewed_at")
     private ZonedDateTime reviewedAt;
 
     @Column(name = "imported_recipe_id")
-    private Long importedRecipeId;
+    private Integer importedRecipeId;
 
     @Column(name = "imported_at")
     private ZonedDateTime importedAt;
@@ -181,7 +181,7 @@ public class PendingRecipe {
     }
 
     /** 승격 완료 표시 (recipes 로 import 됨). */
-    public void markImported(Long recipeId) {
+    public void markImported(Integer recipeId) {
         this.importStatus = "IMPORTED";
         this.importedRecipeId = recipeId;
         this.importedAt = ZonedDateTime.now();

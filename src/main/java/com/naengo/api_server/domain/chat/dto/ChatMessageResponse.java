@@ -11,7 +11,7 @@ import java.util.List;
  * role 은 "user" / "model" 소문자. recipes 가 null 이면 추천이 없었던 메시지.
  */
 public record ChatMessageResponse(
-        @JsonProperty("message_id") Long messageId,
+        @JsonProperty("message_id") Integer messageId,
         @JsonProperty("role") String role,
         @JsonProperty("content") String content,
         @JsonProperty("recipes") List<RecipeListItemResponse> recipes,

@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * pending_recipes.draft_payload / ai_suggested_patch 의 JSONB 구조.
+ * user_recipes.draft_payload / ai_suggested_patch 의 JSONB 구조.
  *
  * <p>키는 naengo-ai schema.sql 의 draft_payload 기본값과 1:1 (snake_case 고정 —
  * {@code @JsonProperty}). AI 가 같은 JSONB 를 읽으므로 키 이름을 강제한다.

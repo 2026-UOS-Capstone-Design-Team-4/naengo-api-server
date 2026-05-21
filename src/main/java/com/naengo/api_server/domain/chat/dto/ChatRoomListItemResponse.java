@@ -9,7 +9,7 @@ import java.time.ZonedDateTime;
  * 채팅방 한 행 — api-3.json {@code ChatRoomResponse} 정합 (snake_case).
  */
 public record ChatRoomListItemResponse(
-        @JsonProperty("room_id") Long roomId,
+        @JsonProperty("room_id") Integer roomId,
         @JsonProperty("title") String title,
         @JsonProperty("created_at") ZonedDateTime createdAt,
         @JsonProperty("updated_at") ZonedDateTime updatedAt

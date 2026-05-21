@@ -20,7 +20,7 @@ public class RecipeStats {
 
     @Id
     @Column(name = "recipe_id")
-    private Long recipeId;
+    private Integer recipeId;
 
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId

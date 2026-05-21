@@ -9,7 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
-public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
+public interface ChatRoomRepository extends JpaRepository<ChatRoom, Integer> {
 
     /** 본인 활성 채팅방 — updated_at 내림차순 (api-3.json `GET /api/v1/chat/rooms`, 단순 배열). */
     @Query("""
@@ -17,15 +17,15 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
            WHERE r.userId = :userId AND r.isActive = true
            ORDER BY r.updatedAt DESC
            """)
-    List<ChatRoom> findActiveByUserOrderByLatestUpdated(@Param("userId") Long userId);
+    List<ChatRoom> findActiveByUserOrderByLatestUpdated(@Param("userId") Integer userId);
 
     /** 본인 소유 활성 채팅방 단건 (soft delete 가드). */
     @Query("""
            SELECT r FROM ChatRoom r
            WHERE r.roomId = :roomId AND r.userId = :userId AND r.isActive = true
            """)
-    Optional<ChatRoom> findActiveByIdAndUser(@Param("roomId") Long roomId,
-                                             @Param("userId") Long userId);
+    Optional<ChatRoom> findActiveByIdAndUser(@Param("roomId") Integer roomId,
+                                             @Param("userId") Integer userId);
 
     /**
      * 회원 탈퇴 시 사용자의 모든 채팅방 soft delete (`is_active=false`).
@@ -35,5 +35,5 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
      */
     @Modifying
     @Query("UPDATE ChatRoom r SET r.isActive = false WHERE r.userId = :userId AND r.isActive = true")
-    int deactivateAllByUserId(@Param("userId") Long userId);
+    int deactivateAllByUserId(@Param("userId") Integer userId);
 }

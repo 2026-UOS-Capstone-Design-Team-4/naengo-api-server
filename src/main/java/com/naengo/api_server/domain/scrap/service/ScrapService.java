@@ -42,7 +42,7 @@ public class ScrapService {
 
     /** 스크랩 추가. 이미 스크랩했으면 409 ALREADY_SCRAPPED. */
     @Transactional
-    public RecipeStatsResponse scrap(Long userId, Long recipeId) {
+    public RecipeStatsResponse scrap(Integer userId, Integer recipeId) {
         requireActiveRecipe(recipeId);
 
         if (scrapRepository.existsByUserIdAndRecipeId(userId, recipeId)) {
@@ -61,7 +61,7 @@ public class ScrapService {
 
     /** 스크랩 취소. 스크랩하지 않았으면 409 NOT_SCRAPPED. */
     @Transactional
-    public RecipeStatsResponse unscrap(Long userId, Long recipeId) {
+    public RecipeStatsResponse unscrap(Integer userId, Integer recipeId) {
         requireActiveRecipe(recipeId);
 
         int deleted = scrapRepository.deleteByUserIdAndRecipeId(userId, recipeId);
@@ -71,7 +71,7 @@ public class ScrapService {
         return currentStats(recipeId);
     }
 
-    private void requireActiveRecipe(Long recipeId) {
+    private void requireActiveRecipe(Integer recipeId) {
         Recipe recipe = recipeRepository.findById(recipeId)
                 .orElseThrow(() -> new CustomException(ErrorCode.RECIPE_NOT_FOUND));
         if (!recipe.isActive()) {
@@ -79,7 +79,7 @@ public class ScrapService {
         }
     }
 
-    private RecipeStatsResponse currentStats(Long recipeId) {
+    private RecipeStatsResponse currentStats(Integer recipeId) {
         // 트리거가 recipe_stats 를 갱신하도록 강제 flush 후 재조회
         entityManager.flush();
         entityManager.clear();
@@ -96,7 +96,7 @@ public class ScrapService {
      */
     @Transactional(readOnly = true)
     public RecipeListResponse listMine(String cursor, int limit) {
-        Long userId = requireCurrentUserId();
+        Integer userId = requireCurrentUserId();
         int size = clampLimit(limit);
         Pageable cap = PageRequest.of(0, size + 1);
 
@@ -105,8 +105,8 @@ public class ScrapService {
         List<Scrap> pageScraps = hasNext ? scraps.subList(0, size) : scraps;
 
         // scrap 순서(최신순) 보존하며 활성 레시피만 매핑
-        List<Long> orderedRecipeIds = pageScraps.stream().map(Scrap::getRecipeId).toList();
-        Map<Long, Recipe> recipeById = recipeRepository.findActiveByIds(orderedRecipeIds).stream()
+        List<Integer> orderedRecipeIds = pageScraps.stream().map(Scrap::getRecipeId).toList();
+        Map<Integer, Recipe> recipeById = recipeRepository.findActiveByIds(orderedRecipeIds).stream()
                 .collect(Collectors.toMap(Recipe::getRecipeId, r -> r));
 
         List<Recipe> orderedActive = orderedRecipeIds.stream()
@@ -114,8 +114,8 @@ public class ScrapService {
                 .filter(java.util.Objects::nonNull)
                 .toList();
 
-        Set<Long> activeIds = recipeById.keySet();
-        Set<Long> likedIds = activeIds.isEmpty()
+        Set<Integer> activeIds = recipeById.keySet();
+        Set<Integer> likedIds = activeIds.isEmpty()
                 ? Set.of()
                 : Set.copyOf(likeRepository.findLikedRecipeIds(userId, activeIds));
 
@@ -130,10 +130,10 @@ public class ScrapService {
         return new RecipeListResponse(items, nextCursor, hasNext);
     }
 
-    private Long parseCursor(String cursor) {
+    private Integer parseCursor(String cursor) {
         if (cursor == null || cursor.isBlank()) return null;
         try {
-            return Long.parseLong(cursor.trim());
+            return Integer.parseInt(cursor.trim());
         } catch (NumberFormatException e) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
@@ -144,8 +144,8 @@ public class ScrapService {
         return Math.min(limit, MAX_LIMIT);
     }
 
-    private Long requireCurrentUserId() {
-        Long userId = SecurityUtil.currentUserIdOrNull();
+    private Integer requireCurrentUserId() {
+        Integer userId = SecurityUtil.currentUserIdOrNull();
         if (userId == null) throw new CustomException(ErrorCode.UNAUTHORIZED);
         return userId;
     }

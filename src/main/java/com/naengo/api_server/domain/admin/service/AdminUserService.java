@@ -16,23 +16,23 @@ public class AdminUserService {
     private final UserRepository userRepository;
 
     @Transactional
-    public AdminUserBlockResponse block(Long userId) {
+    public AdminUserBlockResponse block(Integer userId) {
         User user = loadActiveUser(userId);
         user.block();
         return new AdminUserBlockResponse(user.getUserId(), user.isBlocked());
     }
 
     @Transactional
-    public AdminUserBlockResponse unblock(Long userId) {
+    public AdminUserBlockResponse unblock(Integer userId) {
         User user = loadActiveUser(userId);
         user.unblock();
         return new AdminUserBlockResponse(user.getUserId(), user.isBlocked());
     }
 
-    private User loadActiveUser(Long userId) {
+    private User loadActiveUser(Integer userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
-        if (user.getDeletedAt() != null) {
+        if (!user.isActive()) {
             throw new CustomException(ErrorCode.ALREADY_WITHDRAWN);
         }
         return user;

@@ -12,12 +12,12 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 사용자 레시피 제출 요청 — api-3.json {@code PendingRecipeCreate} 와 정합.
- * pending_recipes 테이블에 INSERT 된다.
+ * 사용자 레시피 제출 요청 — api-3.json {@code UserRecipeCreate} 와 정합.
+ * user_recipes 테이블에 INSERT 된다.
  *
  * <p>최소 필수: title + content. 나머지는 선택 (관리자 승인 시 보정 가능).
  */
-public record PendingRecipeCreateRequest(
+public record UserRecipeCreateRequest(
         @NotBlank @Size(max = 255)   String title,
         @Size(max = 1000)            String description,
         @NotBlank @Size(max = 10000) String content,

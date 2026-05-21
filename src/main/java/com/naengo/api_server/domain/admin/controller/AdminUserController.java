@@ -14,13 +14,13 @@ public class AdminUserController {
 
     /** SPEC-20260504-03 — 사용자 차단. */
     @PostMapping("/{userId}/block")
-    public AdminUserBlockResponse block(@PathVariable Long userId) {
+    public AdminUserBlockResponse block(@PathVariable Integer userId) {
         return adminUserService.block(userId);
     }
 
     /** SPEC-20260504-03 — 차단 해제. */
     @PostMapping("/{userId}/unblock")
-    public AdminUserBlockResponse unblock(@PathVariable Long userId) {
+    public AdminUserBlockResponse unblock(@PathVariable Integer userId) {
         return adminUserService.unblock(userId);
     }
 }

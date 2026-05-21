@@ -10,22 +10,22 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 
-public interface ScrapRepository extends JpaRepository<Scrap, Long> {
+public interface ScrapRepository extends JpaRepository<Scrap, Integer> {
 
-    boolean existsByUserIdAndRecipeId(Long userId, Long recipeId);
+    boolean existsByUserIdAndRecipeId(Integer userId, Integer recipeId);
 
     @Modifying
     @Query("DELETE FROM Scrap s WHERE s.userId = :userId AND s.recipeId = :recipeId")
-    int deleteByUserIdAndRecipeId(@Param("userId") Long userId, @Param("recipeId") Long recipeId);
+    int deleteByUserIdAndRecipeId(@Param("userId") Integer userId, @Param("recipeId") Integer recipeId);
 
     @Modifying
     @Query("DELETE FROM Scrap s WHERE s.userId = :userId")
-    int deleteAllByUserId(@Param("userId") Long userId);
+    int deleteAllByUserId(@Param("userId") Integer userId);
 
     /** 주어진 recipeId 집합 중 사용자가 스크랩한 것만. is_scrapped 일괄 계산용. */
     @Query("SELECT s.recipeId FROM Scrap s WHERE s.userId = :userId AND s.recipeId IN :ids")
-    List<Long> findScrappedRecipeIds(@Param("userId") Long userId,
-                                     @Param("ids") Collection<Long> ids);
+    List<Integer> findScrappedRecipeIds(@Param("userId") Integer userId,
+                                     @Param("ids") Collection<Integer> ids);
 
     /**
      * 본인 스크랩 커서 페이지 — scrap_id 내림차순 (스크랩한 시각의 역순).
@@ -37,7 +37,7 @@ public interface ScrapRepository extends JpaRepository<Scrap, Long> {
              AND (:cursor IS NULL OR s.scrapId < :cursor)
            ORDER BY s.scrapId DESC
            """)
-    List<Scrap> findUserScrapsPage(@Param("userId") Long userId,
-                                   @Param("cursor") Long cursor,
+    List<Scrap> findUserScrapsPage(@Param("userId") Integer userId,
+                                   @Param("cursor") Integer cursor,
                                    Pageable pageable);
 }

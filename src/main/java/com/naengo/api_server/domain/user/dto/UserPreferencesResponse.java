@@ -25,7 +25,7 @@ public record UserPreferencesResponse(
         List<String> preferredCategories,
         List<String> frequentlyUsedIngredients,
         List<String> tasteKeywords,
-        List<Long> recentRecipeIds,
+        List<Integer> recentRecipeIds,
 
         ZonedDateTime aiAnalyzedAt,
         ZonedDateTime updatedAt

@@ -2,8 +2,8 @@ package com.naengo.api_server.domain.admin.dto;
 
 import java.util.List;
 
-public record AdminPendingRecipeListResponse(
-        List<AdminPendingRecipeListItemResponse> items,
+public record AdminUserRecipeListResponse(
+        List<AdminUserRecipeListItemResponse> items,
         int page,
         int size,
         long totalElements,

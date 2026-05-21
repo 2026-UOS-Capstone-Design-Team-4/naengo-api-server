@@ -10,14 +10,14 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 
-public interface RecipeMediaRepository extends JpaRepository<RecipeMedia, Long> {
+public interface RecipeMediaRepository extends JpaRepository<RecipeMedia, Integer> {
 
     @Query("""
            SELECT m FROM RecipeMedia m
            WHERE m.recipe.recipeId IN :recipeIds
            ORDER BY m.recipe.recipeId ASC, m.isPrimary DESC, m.sortOrder ASC, m.mediaId ASC
            """)
-    List<RecipeMedia> findByRecipeIds(@Param("recipeIds") Collection<Long> recipeIds);
+    List<RecipeMedia> findByRecipeIds(@Param("recipeIds") Collection<Integer> recipeIds);
 
     /** video_url 로 정식 레시피 단건 조회 (등록 전 중복 확인). 최신 등록 우선. */
     @Query("""

@@ -9,7 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 
-public interface RecipeRepository extends JpaRepository<Recipe, Long> {
+public interface RecipeRepository extends JpaRepository<Recipe, Integer> {
 
     /**
      * 최신순 커서 페이지. cursor 는 마지막으로 받은 recipeId.
@@ -22,7 +22,7 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
              AND (:cursorId IS NULL OR r.recipeId < :cursorId)
            ORDER BY r.recipeId DESC
            """)
-    List<Recipe> findActiveLatest(@Param("cursorId") Long cursorId, Pageable pageable);
+    List<Recipe> findActiveLatest(@Param("cursorId") Integer cursorId, Pageable pageable);
 
     /**
      * 좋아요순 커서 페이지. cursor 는 {@code (likesCount, recipeId)} 튜플.
@@ -38,7 +38,7 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
            ORDER BY COALESCE(s.likesCount, 0) DESC, r.recipeId DESC
            """)
     List<Recipe> findActiveByLikes(@Param("c1") Integer c1,
-                                   @Param("c2") Long c2,
+                                   @Param("c2") Integer c2,
                                    Pageable pageable);
 
     @Query("""
@@ -46,5 +46,5 @@ public interface RecipeRepository extends JpaRepository<Recipe, Long> {
              LEFT JOIN FETCH r.stats
            WHERE r.recipeId IN :ids AND r.isActive = true
            """)
-    List<Recipe> findActiveByIds(@Param("ids") Collection<Long> ids);
+    List<Recipe> findActiveByIds(@Param("ids") Collection<Integer> ids);
 }

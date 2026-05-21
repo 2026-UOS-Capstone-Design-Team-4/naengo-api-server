@@ -81,8 +81,8 @@ public class UserMeController {
         return userMeService.updatePreferences(currentUserId(), request);
     }
 
-    private Long currentUserId() {
-        Long userId = SecurityUtil.currentUserIdOrNull();
+    private Integer currentUserId() {
+        Integer userId = SecurityUtil.currentUserIdOrNull();
         if (userId == null) throw new CustomException(ErrorCode.UNAUTHORIZED);
         return userId;
     }

@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 /**
  * 공개 레시피 조회 (recipes 의 is_active=true). 커서 페이지네이션 + 사용자 engagement.
  *
- * <p>사용자 제출(pending) CRUD 는 {@code PendingRecipeService} 책임 (PR-4 분리).
+ * <p>사용자 제출(pending) CRUD 는 {@code UserRecipeService} 책임 (PR-4 분리).
  */
 @Service
 @RequiredArgsConstructor
@@ -53,9 +53,9 @@ public class RecipeService {
         List<Recipe> rows = switch (key) {
             case "latest" -> recipeRepository.findActiveLatest(parseLatestCursor(cursor), cap);
             case "likes"  -> {
-                long[] c = parseLikesCursor(cursor);
+                int[] c = parseLikesCursor(cursor);
                 yield recipeRepository.findActiveByLikes(
-                        c == null ? null : (int) c[0],
+                        c == null ? null : c[0],
                         c == null ? null : c[1],
                         cap);
             }
@@ -65,10 +65,10 @@ public class RecipeService {
         boolean hasNext = rows.size() > size;
         List<Recipe> pageRows = hasNext ? rows.subList(0, size) : rows;
 
-        Set<Long> recipeIds = pageRows.stream().map(Recipe::getRecipeId).collect(Collectors.toSet());
-        Long userId = SecurityUtil.currentUserIdOrNull();
-        Set<Long> likedIds = engagementIds(userId, recipeIds, true);
-        Set<Long> scrappedIds = engagementIds(userId, recipeIds, false);
+        Set<Integer> recipeIds = pageRows.stream().map(Recipe::getRecipeId).collect(Collectors.toSet());
+        Integer userId = SecurityUtil.currentUserIdOrNull();
+        Set<Integer> likedIds = engagementIds(userId, recipeIds, true);
+        Set<Integer> scrappedIds = engagementIds(userId, recipeIds, false);
 
         List<RecipeListItemResponse> items = recipeListMapper.toItems(pageRows, likedIds, scrappedIds);
         String nextCursor = hasNext ? encodeCursor(key, pageRows.get(pageRows.size() - 1)) : null;
@@ -80,14 +80,14 @@ public class RecipeService {
      * 단건 조회 — recipes 의 활성 레시피만. 응답은 목록 항목과 동형 (api-3.json 정합).
      */
     @Transactional(readOnly = true)
-    public RecipeListItemResponse detail(Long recipeId) {
+    public RecipeListItemResponse detail(Integer recipeId) {
         Recipe recipe = recipeRepository.findById(recipeId)
                 .orElseThrow(() -> new CustomException(ErrorCode.RECIPE_NOT_FOUND));
         if (!recipe.isActive()) {
             throw new CustomException(ErrorCode.RECIPE_NOT_FOUND);
         }
 
-        Long userId = SecurityUtil.currentUserIdOrNull();
+        Integer userId = SecurityUtil.currentUserIdOrNull();
         boolean liked = userId != null && likeRepository.existsByUserIdAndRecipeId(userId, recipeId);
         boolean scrapped = userId != null && scrapRepository.existsByUserIdAndRecipeId(userId, recipeId);
 
@@ -96,22 +96,22 @@ public class RecipeService {
 
     // ─── 커서 ──────────────────────────────────────────────
 
-    private Long parseLatestCursor(String cursor) {
+    private Integer parseLatestCursor(String cursor) {
         if (cursor == null || cursor.isBlank()) return null;
         try {
-            return Long.parseLong(cursor.trim());
+            return Integer.parseInt(cursor.trim());
         } catch (NumberFormatException e) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
     }
 
     /** "likes_recipeId" → [likes, recipeId]. null 이면 첫 페이지. */
-    private long[] parseLikesCursor(String cursor) {
+    private int[] parseLikesCursor(String cursor) {
         if (cursor == null || cursor.isBlank()) return null;
         String[] parts = cursor.trim().split("_");
         if (parts.length != 2) throw new CustomException(ErrorCode.INVALID_INPUT);
         try {
-            return new long[]{Long.parseLong(parts[0]), Long.parseLong(parts[1])};
+            return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
         } catch (NumberFormatException e) {
             throw new CustomException(ErrorCode.INVALID_INPUT);
         }
@@ -125,9 +125,9 @@ public class RecipeService {
         return String.valueOf(last.getRecipeId());
     }
 
-    private Set<Long> engagementIds(Long userId, Set<Long> recipeIds, boolean liked) {
+    private Set<Integer> engagementIds(Integer userId, Set<Integer> recipeIds, boolean liked) {
         if (userId == null || recipeIds.isEmpty()) return Set.of();
-        List<Long> ids = liked
+        List<Integer> ids = liked
                 ? likeRepository.findLikedRecipeIds(userId, recipeIds)
                 : scrapRepository.findScrappedRecipeIds(userId, recipeIds);
         return Set.copyOf(ids);

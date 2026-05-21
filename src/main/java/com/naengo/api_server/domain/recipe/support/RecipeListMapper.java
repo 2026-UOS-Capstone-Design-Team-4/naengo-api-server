@@ -48,12 +48,12 @@ public class RecipeListMapper {
 
     /** 사용자 컨텍스트 포함. likedIds / scrappedIds 는 현재 사용자 기준. */
     public List<RecipeListItemResponse> toItems(List<Recipe> recipes,
-                                                Set<Long> likedIds,
-                                                Set<Long> scrappedIds) {
+                                                Set<Integer> likedIds,
+                                                Set<Integer> scrappedIds) {
         if (recipes.isEmpty()) return List.of();
 
-        List<Long> recipeIds = recipes.stream().map(Recipe::getRecipeId).toList();
-        Map<Long, String> nicknameMap = loadNicknames(recipes);
+        List<Integer> recipeIds = recipes.stream().map(Recipe::getRecipeId).toList();
+        Map<Integer, String> nicknameMap = loadNicknames(recipes);
         Children c = loadChildren(recipeIds);
 
         List<RecipeListItemResponse> out = new ArrayList<>(recipes.size());
@@ -65,7 +65,7 @@ public class RecipeListMapper {
 
     /** 단건 매핑 (RecipeService.detail / AdminRecipeService.findByVideoUrl). */
     public RecipeListItemResponse toItem(Recipe r, boolean liked, boolean scrapped) {
-        Map<Long, String> nicknameMap = loadNicknames(List.of(r));
+        Map<Integer, String> nicknameMap = loadNicknames(List.of(r));
         Children c = loadChildren(List.of(r.getRecipeId()));
         return toItem(r, nicknameMap, c,
                 liked ? Set.of(r.getRecipeId()) : Set.of(),
@@ -75,11 +75,11 @@ public class RecipeListMapper {
     // ─── 내부 ─────────────────────────────────────────────
 
     private RecipeListItemResponse toItem(Recipe r,
-                                          Map<Long, String> nicknameMap,
+                                          Map<Integer, String> nicknameMap,
                                           Children c,
-                                          Set<Long> likedIds,
-                                          Set<Long> scrappedIds) {
-        Long id = r.getRecipeId();
+                                          Set<Integer> likedIds,
+                                          Set<Integer> scrappedIds) {
+        Integer id = r.getRecipeId();
         RecipeStats s = r.getStats();
         int likes = s == null ? 0 : s.getLikesCount();
         int scraps = s == null ? 0 : s.getScrapCount();
@@ -116,7 +116,7 @@ public class RecipeListMapper {
         );
     }
 
-    private Children loadChildren(List<Long> recipeIds) {
+    private Children loadChildren(List<Integer> recipeIds) {
         if (recipeIds.isEmpty()) {
             return new Children(Map.of(), Map.of(), Map.of(), Map.of());
         }
@@ -131,22 +131,22 @@ public class RecipeListMapper {
                         m -> m.getRecipe().getRecipeId()));
     }
 
-    private <T> Map<Long, List<T>> groupByRecipe(List<T> rows,
-                                                 java.util.function.Function<T, Long> keyFn) {
-        Map<Long, List<T>> map = new HashMap<>();
+    private <T> Map<Integer, List<T>> groupByRecipe(List<T> rows,
+                                                 java.util.function.Function<T, Integer> keyFn) {
+        Map<Integer, List<T>> map = new HashMap<>();
         for (T row : rows) {
             map.computeIfAbsent(keyFn.apply(row), k -> new ArrayList<>()).add(row);
         }
         return map;
     }
 
-    private Map<Long, String> loadNicknames(List<Recipe> recipes) {
-        List<Long> authorIds = recipes.stream()
+    private Map<Integer, String> loadNicknames(List<Recipe> recipes) {
+        List<Integer> authorIds = recipes.stream()
                 .map(Recipe::getAuthorId)
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        Map<Long, String> nicknameMap = new HashMap<>();
+        Map<Integer, String> nicknameMap = new HashMap<>();
         if (!authorIds.isEmpty()) {
             userRepository.findAllById(authorIds)
                     .forEach(u -> nicknameMap.put(u.getUserId(), u.getNickname()));
@@ -154,9 +154,9 @@ public class RecipeListMapper {
         return nicknameMap;
     }
 
-    private record Children(Map<Long, List<RecipeIngredient>> ingredients,
-                            Map<Long, List<RecipeStep>> steps,
-                            Map<Long, List<RecipeLabel>> labels,
-                            Map<Long, List<RecipeMedia>> media) {
+    private record Children(Map<Integer, List<RecipeIngredient>> ingredients,
+                            Map<Integer, List<RecipeStep>> steps,
+                            Map<Integer, List<RecipeLabel>> labels,
+                            Map<Integer, List<RecipeMedia>> media) {
     }
 }

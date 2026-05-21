@@ -28,7 +28,7 @@ public class RecipeLabel {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "label_id")
-    private Long labelId;
+    private Integer labelId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "recipe_id", nullable = false)

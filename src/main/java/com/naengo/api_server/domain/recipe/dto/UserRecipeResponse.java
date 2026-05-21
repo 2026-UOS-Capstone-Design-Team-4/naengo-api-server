@@ -2,7 +2,7 @@ package com.naengo.api_server.domain.recipe.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.naengo.api_server.domain.recipe.entity.Ingredient;
-import com.naengo.api_server.domain.recipe.entity.PendingRecipe;
+import com.naengo.api_server.domain.recipe.entity.UserRecipe;
 import com.naengo.api_server.domain.recipe.entity.RecipeStatus;
 
 import java.math.BigDecimal;
@@ -10,12 +10,12 @@ import java.time.ZonedDateTime;
 import java.util.List;
 
 /**
- * 사용자 제출 레시피 응답. api-3.json 의 {@code PendingRecipeResponse} 와 정합 (snake_case).
+ * 사용자 제출 레시피 응답. api-3.json 의 {@code UserRecipeResponse} 와 정합 (snake_case).
  *
  * <p>사용자 제출/조회 endpoint 공용. 관리자 endpoint 는 별도 DTO 유지 (PR-6 에서 통합 검토).
  */
-public record PendingRecipeResponse(
-        @JsonProperty("pending_recipe_id") Long pendingRecipeId,
+public record UserRecipeResponse(
+        @JsonProperty("user_recipe_id") Integer userRecipeId,
         @JsonProperty("title") String title,
         @JsonProperty("content") String content,
         @JsonProperty("description") String description,
@@ -36,9 +36,9 @@ public record PendingRecipeResponse(
         @JsonProperty("reviewed_at") ZonedDateTime reviewedAt,
         @JsonProperty("created_at") ZonedDateTime createdAt
 ) {
-    public static PendingRecipeResponse from(PendingRecipe p) {
-        return new PendingRecipeResponse(
-                p.getPendingRecipeId(),
+    public static UserRecipeResponse from(UserRecipe p) {
+        return new UserRecipeResponse(
+                p.getUserRecipeId(),
                 p.getTitle(),
                 p.getContent(),
                 p.getDescription(),

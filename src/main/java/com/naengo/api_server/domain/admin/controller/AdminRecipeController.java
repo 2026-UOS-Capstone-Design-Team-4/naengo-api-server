@@ -1,10 +1,10 @@
 package com.naengo.api_server.domain.admin.controller;
 
-import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeDetailResponse;
-import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeListResponse;
-import com.naengo.api_server.domain.admin.dto.PendingRecipeAdminUpdateRequest;
+import com.naengo.api_server.domain.admin.dto.AdminUserRecipeDetailResponse;
+import com.naengo.api_server.domain.admin.dto.AdminUserRecipeListResponse;
+import com.naengo.api_server.domain.admin.dto.UserRecipeAdminUpdateRequest;
 import com.naengo.api_server.domain.admin.service.AdminRecipeService;
-import com.naengo.api_server.domain.recipe.dto.PendingRecipeResponse;
+import com.naengo.api_server.domain.recipe.dto.UserRecipeResponse;
 import com.naengo.api_server.domain.recipe.entity.RecipeStatus;
 import com.naengo.api_server.global.exception.CustomException;
 import com.naengo.api_server.global.exception.ErrorCode;
@@ -15,11 +15,11 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 관리자 — 제출 레시피 검토 / 단일 PATCH 수정·승인·반려.
  *
- * <p>api-3.json: {@code PATCH /api/v1/admin/pending-recipes/{id}}.
+ * <p>api-3.json: {@code PATCH /api/v1/admin/user-recipes/{id}}.
  * list / detail GET 은 관리 콘솔 편의 확장 (api-3.json 외, 유지).
  */
 @RestController
-@RequestMapping("/api/v1/admin/pending-recipes")
+@RequestMapping("/api/v1/admin/user-recipes")
 @RequiredArgsConstructor
 public class AdminRecipeController {
 
@@ -27,7 +27,7 @@ public class AdminRecipeController {
 
     /** 검토 목록 (status 필터, 기본 PENDING). */
     @GetMapping
-    public AdminPendingRecipeListResponse list(
+    public AdminUserRecipeListResponse list(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -36,15 +36,15 @@ public class AdminRecipeController {
 
     /** 단건 상세. */
     @GetMapping("/{id}")
-    public AdminPendingRecipeDetailResponse detail(@PathVariable Long id) {
+    public AdminUserRecipeDetailResponse detail(@PathVariable Integer id) {
         return adminRecipeService.detail(id);
     }
 
     /** 단일 PATCH — 콘텐츠 수정 + 상태 전이(승인 승격/반려) 통합. */
     @PatchMapping("/{id}")
-    public PendingRecipeResponse update(
-            @PathVariable Long id,
-            @Valid @RequestBody PendingRecipeAdminUpdateRequest request) {
+    public UserRecipeResponse update(
+            @PathVariable Integer id,
+            @Valid @RequestBody UserRecipeAdminUpdateRequest request) {
         return adminRecipeService.update(id, request);
     }
 

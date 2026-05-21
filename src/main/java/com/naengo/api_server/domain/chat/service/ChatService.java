@@ -39,7 +39,7 @@ public class ChatService {
 
     /** 본인의 활성 채팅방 목록 (`updated_at DESC`, 단순 배열). */
     @Transactional(readOnly = true)
-    public List<ChatRoomListItemResponse> listMyRooms(Long userId) {
+    public List<ChatRoomListItemResponse> listMyRooms(Integer userId) {
         return chatRoomRepository.findActiveByUserOrderByLatestUpdated(userId).stream()
                 .map(ChatRoomListItemResponse::from)
                 .toList();
@@ -47,7 +47,7 @@ public class ChatService {
 
     /** 본인 소유 채팅방의 메시지 시간순 (단순 배열). recipe_ids → 활성 RecipeListItemResponse. */
     @Transactional(readOnly = true)
-    public List<ChatMessageResponse> listMessages(Long userId, Long roomId) {
+    public List<ChatMessageResponse> listMessages(Integer userId, Integer roomId) {
         ChatRoom room = chatRoomRepository.findById(roomId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CHAT_ROOM_NOT_FOUND));
 
@@ -60,12 +60,12 @@ public class ChatService {
 
         List<ChatMessage> messages = chatMessageRepository.findByRoomIdOrderByCreatedAt(roomId);
 
-        Set<Long> allRecipeIds = new HashSet<>();
+        Set<Integer> allRecipeIds = new HashSet<>();
         for (ChatMessage m : messages) {
             if (m.getRecipeIds() != null) allRecipeIds.addAll(m.getRecipeIds());
         }
 
-        Map<Long, RecipeListItemResponse> recipeMap;
+        Map<Integer, RecipeListItemResponse> recipeMap;
         if (allRecipeIds.isEmpty()) {
             recipeMap = Collections.emptyMap();
         } else {
@@ -98,7 +98,7 @@ public class ChatService {
      * 없거나 타인 소유거나 이미 삭제됨 → 404 (api-3.json: 이미 삭제 시 404).
      */
     @Transactional
-    public void deleteRoom(Long userId, Long roomId) {
+    public void deleteRoom(Integer userId, Integer roomId) {
         ChatRoom room = chatRoomRepository.findActiveByIdAndUser(roomId, userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CHAT_ROOM_NOT_FOUND));
         room.deactivate();

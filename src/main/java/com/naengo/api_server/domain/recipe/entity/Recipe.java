@@ -31,10 +31,10 @@ public class Recipe {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "recipe_id")
-    private Long recipeId;
+    private Integer recipeId;
 
     @Column(name = "source_id")
-    private Long sourceId;
+    private Integer sourceId;
 
     @Column(nullable = false, length = 255)
     private String title;
@@ -69,7 +69,7 @@ public class Recipe {
     private RecipeAuthorType authorType = RecipeAuthorType.ADMIN;
 
     @Column(name = "author_id")
-    private Long authorId;
+    private Integer authorId;
 
     /** "NOT_CLASSIFIED" / "CLASSIFIED" / "FAILED" / "REVIEW_REQUIRED" */
     @Column(name = "classification_status", nullable = false, length = 30)

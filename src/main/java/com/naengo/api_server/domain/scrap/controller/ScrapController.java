@@ -20,12 +20,12 @@ public class ScrapController {
     private final ScrapService scrapService;
 
     @PostMapping("/api/v1/recipes/{id}/scraps")
-    public RecipeStatsResponse scrap(@PathVariable Long id) {
+    public RecipeStatsResponse scrap(@PathVariable Integer id) {
         return scrapService.scrap(currentUserId(), id);
     }
 
     @DeleteMapping("/api/v1/recipes/{id}/scraps")
-    public RecipeStatsResponse unscrap(@PathVariable Long id) {
+    public RecipeStatsResponse unscrap(@PathVariable Integer id) {
         return scrapService.unscrap(currentUserId(), id);
     }
 
@@ -37,8 +37,8 @@ public class ScrapController {
         return scrapService.listMine(cursor, limit);
     }
 
-    private Long currentUserId() {
-        Long userId = SecurityUtil.currentUserIdOrNull();
+    private Integer currentUserId() {
+        Integer userId = SecurityUtil.currentUserIdOrNull();
         if (userId == null) throw new CustomException(ErrorCode.UNAUTHORIZED);
         return userId;
     }

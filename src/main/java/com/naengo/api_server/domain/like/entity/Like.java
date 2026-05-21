@@ -32,13 +32,13 @@ public class Like {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "like_id")
-    private Long likeId;
+    private Integer likeId;
 
     @Column(name = "user_id", nullable = false)
-    private Long userId;
+    private Integer userId;
 
     @Column(name = "recipe_id", nullable = false)
-    private Long recipeId;
+    private Integer recipeId;
 
     @Column(name = "created_at", updatable = false)
     @Builder.Default

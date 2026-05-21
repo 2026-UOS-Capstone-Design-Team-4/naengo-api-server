@@ -64,6 +64,8 @@ public class KakaoOAuthClient {
     // ─── 카카오 API 응답 내부 DTO ───────────────────────────────────────────
 
     private record KakaoApiResponse(
+            // 카카오의 user id 는 64bit. 우리 user_id(SERIAL/Integer) 와 별개이며
+            // providerUserId 로 String 변환되므로 여기선 Long 으로 받아야 overflow 없음.
             Long id,
             @JsonProperty("kakao_account") KakaoAccount kakaoAccount
     ) {

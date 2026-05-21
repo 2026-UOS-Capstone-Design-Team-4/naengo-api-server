@@ -8,12 +8,12 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 
-public interface RecipeStepRepository extends JpaRepository<RecipeStep, Long> {
+public interface RecipeStepRepository extends JpaRepository<RecipeStep, Integer> {
 
     @Query("""
            SELECT s FROM RecipeStep s
            WHERE s.recipe.recipeId IN :recipeIds
            ORDER BY s.recipe.recipeId ASC, s.stepNo ASC
            """)
-    List<RecipeStep> findByRecipeIds(@Param("recipeIds") Collection<Long> recipeIds);
+    List<RecipeStep> findByRecipeIds(@Param("recipeIds") Collection<Integer> recipeIds);
 }

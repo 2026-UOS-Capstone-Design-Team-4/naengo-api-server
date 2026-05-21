@@ -8,11 +8,11 @@ import java.time.ZonedDateTime;
 import java.util.List;
 
 /**
- * 관리자용 pending_recipes 단건 상세 — 모든 컬럼 노출.
+ * 관리자용 user_recipes 단건 상세 — 모든 컬럼 노출.
  */
-public record AdminPendingRecipeDetailResponse(
-        Long pendingRecipeId,
-        Long userId,
+public record AdminUserRecipeDetailResponse(
+        Integer userRecipeId,
+        Integer userId,
         String userNickname,
         String title,
         String description,

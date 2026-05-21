@@ -1,12 +1,12 @@
 package com.naengo.api_server.domain.admin.service;
 
-import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeDetailResponse;
-import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeListItemResponse;
-import com.naengo.api_server.domain.admin.dto.AdminPendingRecipeListResponse;
-import com.naengo.api_server.domain.admin.dto.PendingRecipeAdminUpdateRequest;
-import com.naengo.api_server.domain.recipe.dto.PendingRecipeResponse;
+import com.naengo.api_server.domain.admin.dto.AdminUserRecipeDetailResponse;
+import com.naengo.api_server.domain.admin.dto.AdminUserRecipeListItemResponse;
+import com.naengo.api_server.domain.admin.dto.AdminUserRecipeListResponse;
+import com.naengo.api_server.domain.admin.dto.UserRecipeAdminUpdateRequest;
+import com.naengo.api_server.domain.recipe.dto.UserRecipeResponse;
 import com.naengo.api_server.domain.recipe.dto.RecipeListItemResponse;
-import com.naengo.api_server.domain.recipe.entity.PendingRecipe;
+import com.naengo.api_server.domain.recipe.entity.UserRecipe;
 import com.naengo.api_server.domain.recipe.entity.Recipe;
 import com.naengo.api_server.domain.recipe.entity.RecipeAuthorType;
 import com.naengo.api_server.domain.recipe.entity.RecipeIngredient;
@@ -14,7 +14,7 @@ import com.naengo.api_server.domain.recipe.entity.RecipeLabel;
 import com.naengo.api_server.domain.recipe.entity.RecipeMedia;
 import com.naengo.api_server.domain.recipe.entity.RecipeStatus;
 import com.naengo.api_server.domain.recipe.entity.RecipeStep;
-import com.naengo.api_server.domain.recipe.repository.PendingRecipeRepository;
+import com.naengo.api_server.domain.recipe.repository.UserRecipeRepository;
 import com.naengo.api_server.domain.recipe.repository.RecipeMediaRepository;
 import com.naengo.api_server.domain.recipe.repository.RecipeRepository;
 import com.naengo.api_server.domain.recipe.support.RecipeListMapper;
@@ -37,9 +37,9 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 관리자 — pending_recipes 검토 / 수정 / 승인·반려 (단일 PATCH), recipes video_url 조회.
+ * 관리자 — user_recipes 검토 / 수정 / 승인·반려 (단일 PATCH), recipes video_url 조회.
  *
- * <p>api-3.json `PATCH /api/v1/admin/pending-recipes/{id}` 정합:
+ * <p>api-3.json `PATCH /api/v1/admin/user-recipes/{id}` 정합:
  * <ul>
  *   <li>전달하지 않은 필드는 변경하지 않는다 (PATCH 시맨틱).</li>
  *   <li>status 가 변경되면 reviewed_at = NOW.</li>
@@ -54,23 +54,23 @@ public class AdminRecipeService {
 
     private static final int MAX_PAGE_SIZE = 50;
 
-    private final PendingRecipeRepository pendingRecipeRepository;
+    private final UserRecipeRepository userRecipeRepository;
     private final RecipeRepository recipeRepository;
     private final RecipeMediaRepository recipeMediaRepository;
     private final UserRepository userRepository;
     private final RecipeListMapper recipeListMapper;
 
     @Transactional(readOnly = true)
-    public AdminPendingRecipeListResponse list(RecipeStatus status, int page, int size) {
+    public AdminUserRecipeListResponse list(RecipeStatus status, int page, int size) {
         RecipeStatus filter = status == null ? RecipeStatus.PENDING : status;
         Pageable pageable = PageRequest.of(Math.max(0, page), clampSize(size));
-        Page<PendingRecipe> result = pendingRecipeRepository.findByStatusOrderByLatest(filter, pageable);
+        Page<UserRecipe> result = userRecipeRepository.findByStatusOrderByLatest(filter, pageable);
 
-        Map<Long, String> nicknameMap = loadNicknames(result.getContent().stream().map(PendingRecipe::getUserId).toList());
+        Map<Integer, String> nicknameMap = loadNicknames(result.getContent().stream().map(UserRecipe::getUserId).toList());
 
-        List<AdminPendingRecipeListItemResponse> items = result.getContent().stream()
-                .map(p -> new AdminPendingRecipeListItemResponse(
-                        p.getPendingRecipeId(),
+        List<AdminUserRecipeListItemResponse> items = result.getContent().stream()
+                .map(p -> new AdminUserRecipeListItemResponse(
+                        p.getUserRecipeId(),
                         p.getUserId(),
                         AuthorDisplayName.of(nicknameMap.get(p.getUserId())),
                         p.getTitle(),
@@ -82,7 +82,7 @@ public class AdminRecipeService {
                 ))
                 .toList();
 
-        return new AdminPendingRecipeListResponse(
+        return new AdminUserRecipeListResponse(
                 items,
                 result.getNumber(),
                 result.getSize(),
@@ -92,16 +92,16 @@ public class AdminRecipeService {
     }
 
     @Transactional(readOnly = true)
-    public AdminPendingRecipeDetailResponse detail(Long pendingRecipeId) {
-        PendingRecipe p = pendingRecipeRepository.findById(pendingRecipeId)
+    public AdminUserRecipeDetailResponse detail(Integer userRecipeId) {
+        UserRecipe p = userRecipeRepository.findById(userRecipeId)
                 .orElseThrow(() -> new CustomException(ErrorCode.PENDING_RECIPE_NOT_FOUND));
 
         String rawNickname = userRepository.findById(p.getUserId())
                 .map(User::getNickname)
                 .orElse(null);
 
-        return new AdminPendingRecipeDetailResponse(
-                p.getPendingRecipeId(),
+        return new AdminUserRecipeDetailResponse(
+                p.getUserRecipeId(),
                 p.getUserId(),
                 AuthorDisplayName.of(rawNickname),
                 p.getTitle(),
@@ -130,8 +130,8 @@ public class AdminRecipeService {
      * 단일 PATCH — 콘텐츠 부분 수정 + 상태 전이(승인 승격/반려) 통합.
      */
     @Transactional
-    public PendingRecipeResponse update(Long pendingRecipeId, PendingRecipeAdminUpdateRequest req) {
-        PendingRecipe p = pendingRecipeRepository.findById(pendingRecipeId)
+    public UserRecipeResponse update(Integer userRecipeId, UserRecipeAdminUpdateRequest req) {
+        UserRecipe p = userRecipeRepository.findById(userRecipeId)
                 .orElseThrow(() -> new CustomException(ErrorCode.PENDING_RECIPE_NOT_FOUND));
 
         // 1) 콘텐츠 부분 수정 (null 은 보존)
@@ -156,7 +156,7 @@ public class AdminRecipeService {
         // 3) admin_note 는 상태 전이와 독립적으로 반영
         p.setAdminNote(req.adminNote());
 
-        return PendingRecipeResponse.from(p);
+        return UserRecipeResponse.from(p);
     }
 
     /** video_url(recipe_media) 로 정식 레시피 단건 조회 (등록 전 중복 확인). 없으면 404. */
@@ -171,7 +171,7 @@ public class AdminRecipeService {
 
     // ─── 내부 ────────────────────────────────────────
 
-    private void promoteToRecipe(PendingRecipe p) {
+    private void promoteToRecipe(UserRecipe p) {
         Recipe recipe = Recipe.builder()
                 .title(p.getTitle())
                 .description(p.getDescription())
@@ -203,7 +203,7 @@ public class AdminRecipeService {
         p.markImported(saved.getRecipeId());
     }
 
-    private void ensureCompleteForApproval(PendingRecipe p) {
+    private void ensureCompleteForApproval(UserRecipe p) {
         if (isBlank(p.getTitle())
                 || isBlank(p.getDescription())
                 || isEmpty(p.getIngredients())
@@ -225,9 +225,9 @@ public class AdminRecipeService {
         return list == null || list.isEmpty();
     }
 
-    private Map<Long, String> loadNicknames(List<Long> userIds) {
-        Map<Long, String> map = new HashMap<>();
-        List<Long> distinct = userIds.stream().filter(Objects::nonNull).distinct().toList();
+    private Map<Integer, String> loadNicknames(List<Integer> userIds) {
+        Map<Integer, String> map = new HashMap<>();
+        List<Integer> distinct = userIds.stream().filter(Objects::nonNull).distinct().toList();
         if (distinct.isEmpty()) return map;
         userRepository.findAllById(distinct).forEach(u -> map.put(u.getUserId(), u.getNickname()));
         return map;

@@ -18,7 +18,7 @@ import java.util.List;
  * 클라이언트는 모르는 필드를 무시하므로 호환에 문제 없음.
  */
 public record RecipeListItemResponse(
-        @JsonProperty("id") Long recipeId,
+        @JsonProperty("id") Integer recipeId,
         @JsonProperty("title") String title,
         @JsonProperty("description") String description,
         @JsonProperty("ingredients") List<Ingredient> ingredients,

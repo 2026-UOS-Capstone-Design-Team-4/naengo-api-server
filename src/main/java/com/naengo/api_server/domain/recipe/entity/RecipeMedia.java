@@ -27,14 +27,14 @@ public class RecipeMedia {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "media_id")
-    private Long mediaId;
+    private Integer mediaId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "recipe_id", nullable = false)
     private Recipe recipe;
 
     @Column(name = "step_id")
-    private Long stepId;
+    private Integer stepId;
 
     @Column(name = "media_type", nullable = false, length = 20)
     private String mediaType;
@@ -68,7 +68,7 @@ public class RecipeMedia {
     private String storageProvider = "S3";
 
     @Column(name = "generation_id")
-    private Long generationId;
+    private Integer generationId;
 
     @Column(name = "is_primary", nullable = false)
     @Builder.Default
