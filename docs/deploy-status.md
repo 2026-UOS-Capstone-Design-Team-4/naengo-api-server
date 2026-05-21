@@ -1,4 +1,4 @@
-# 배포 진척 추적 (2026-05-21 시작)
+# 배포 진척 추적 (2026-05-20 시작)
 
 > 채팅 컨텍스트가 사라져도 다음 세션에서 즉시 이어갈 수 있도록, 본인 수행
 > 액션 / 입력값 / 의존성 / 막힌 지점을 한 페이지에 모은다. 절차 자체는
@@ -140,3 +140,5 @@
 - 2026-05-21 **옵션 A Phase 1 완료**: Flyway V1~V5 폐기, 신규 V1 = DBv5.sql 통째(broken index/trigger 2건만 정정), `application-prod.yml` 에 `baseline-on-migrate=true` + `baseline-version="1"` 설정.
 - 2026-05-21 **옵션 A Phase 2~7 완료**: User entity (email→username, deletedAt 제거, Long→Integer) / SocialAccount→UserIdentity (테이블 user_identities, 컬럼명 정합, AuthProvider 4종 확장) / UserProfile (Integer + JSONB NOT NULL DEFAULT) / PendingRecipe→UserRecipe (테이블 user_recipes, URL `/api/v1/[admin/]user-recipes`) / Recipe + 자식 entities + Like/Scrap/Chat Long→Integer ripple / JWT·SecurityUtil Integer / 통합테스트 7 파일 일괄 정합. **Testcontainers 30/30 PASS** (Auth 8 / Cors 4 / ProfileChat 3 / Recipe 6 / RequestId 4 / SocialAuth 5).
 - 2026-05-21 **🎉 첫 운영 배포 성공**: CI 통과 → ECR `:8cbea88...` → Task Definition rev 2 → Service desired=1 force-new-deployment. Spring 부팅 63s, Flyway baseline 자동 init, Tomcat 8080, ALB TG healthy. 검증: `/` 200 + `/api/v1/users/me` 401 + signup 201 (user_id=4 발급 + Secure HttpOnly 쿠키). B4/B6/B7/B8 모두 완료. 남은: B5(도메인+ACM+Route53+443), A2/B3-c update(KAKAO redirect URI), A3(CORS 좁힘), C3(AI JWT 공유), D3/D4(모니터링·IAM 좁힘).
+- 2026-05-22 **D1/D3/D5 완료** (우리측 단독 작업 마감): 로컬 `.env` 운영 secret 4종 제거 + 모니터링 SNS 구독 Confirmed + IAM MFA 활성화. 통합테스트 30/30 재실행 PASS. **로컬 e2e 33/33 PASS** (`scripts/e2e-smoke-prod.sh` 신설).
+- 2026-05-22 **⚠️ 운영 RDS schema 손상 발견**: 운영 ALB e2e 시 `relation "users" does not exist` 500 발화. RDS PG 로그 분석 결과 **04:35 KST 에 DB 작업자 (`172.31.3.36`, master 사용자 `naengo`) 가 큰 schema 변경 SQL 실행 — `pending_recipes` (옛 schema) 참조 statement 가 첫 ERROR → 일부 DROP 만 적용 + CREATE 단계 전 abort 추정**. ECS task 는 부팅 시점 metadata cache 유효해서 hibernate validate 통과 + healthcheck path `/` 가 DB 미접근 → 모니터링 사각. 코드 무결성: 통합 30/30 + 로컬 e2e 33/33 PASS 로 입증. 자세한 진단: [`changes/2026-05-22-prod-users-table-missing.md`](changes/2026-05-22-prod-users-table-missing.md). **다음 액션: DB 팀원과 원인 확인 → schema 복구 → ECS force-new-deployment → 운영 e2e 재실행**.
