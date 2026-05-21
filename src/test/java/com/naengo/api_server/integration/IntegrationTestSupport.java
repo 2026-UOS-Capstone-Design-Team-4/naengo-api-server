@@ -72,8 +72,8 @@ public abstract class IntegrationTestSupport {
                     TRUNCATE TABLE
                       chat_messages, chat_rooms,
                       likes, scraps, recipe_stats,
-                      pending_recipes, recipes,
-                      user_profiles, users
+                      user_recipes, recipes,
+                      user_identities, user_profiles, users
                     RESTART IDENTITY CASCADE
                     """).executeUpdate());
     }

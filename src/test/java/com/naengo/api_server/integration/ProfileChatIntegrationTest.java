@@ -126,7 +126,7 @@ class ProfileChatIntegrationTest extends IntegrationTestSupport {
     // ─── 헬퍼 ───────────────────────────────────────────────
 
     private String signup(String email, String nickname) {
-        String body = "{\"email\":\"%s\",\"password\":\"pw12345A\",\"nickname\":\"%s\"}"
+        String body = "{\"username\":\"%s\",\"password\":\"pw12345A\",\"nickname\":\"%s\"}"
                 .formatted(email, nickname);
         ResponseEntity<String> r = client.post().uri("/api/v1/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON).body(body)
@@ -137,7 +137,7 @@ class ProfileChatIntegrationTest extends IntegrationTestSupport {
 
     private long userIdByEmail(String email) {
         Number id = (Number) entityManager.createNativeQuery(
-                        "SELECT user_id FROM users WHERE email = :e")
+                        "SELECT user_id FROM users WHERE username = :e")
                 .setParameter("e", email).getSingleResult();
         return id.longValue();
     }

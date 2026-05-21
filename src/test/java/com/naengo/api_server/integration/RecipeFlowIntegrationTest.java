@@ -23,34 +23,34 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
         // 1. alice 가입
         String aliceToken = signup("alice@b.c", "alice");
 
-        // 2. alice 가 완성 레시피 제출 → pending_recipes (201 + PendingRecipeResponse)
-        ResponseEntity<String> submit = postJson("/api/v1/pending-recipes",
+        // 2. alice 가 완성 레시피 제출 → user_recipes (201 + UserRecipeResponse)
+        ResponseEntity<String> submit = postJson("/api/v1/user-recipes",
                 fullRecipeBody("김치두부찌개"), aliceToken);
         assertThat(submit.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String submitBody = submit.getBody();
         long pendingId = Long.parseLong(
-                AuthCookieIntegrationTest.extractField(submitBody, "pending_recipe_id"));
+                AuthCookieIntegrationTest.extractField(submitBody, "user_recipe_id"));
         assertThat(pendingId).isPositive();
         assertThat(submitBody).contains("\"status\":\"PENDING\"");
 
-        // 3. alice 의 /api/v1/pending-recipes → 단순 배열, PENDING 1건
-        ResponseEntity<String> myList = get("/api/v1/pending-recipes", aliceToken);
+        // 3. alice 의 /api/v1/user-recipes → 단순 배열, PENDING 1건
+        ResponseEntity<String> myList = get("/api/v1/user-recipes", aliceToken);
         assertThat(myList.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(myList.getBody()).contains("\"status\":\"PENDING\"");
 
         // 3b. 단건 조회 — 본인 소유
-        ResponseEntity<String> one = get("/api/v1/pending-recipes/" + pendingId, aliceToken);
+        ResponseEntity<String> one = get("/api/v1/user-recipes/" + pendingId, aliceToken);
         assertThat(one.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(one.getBody()).contains("\"pending_recipe_id\":" + pendingId);
+        assertThat(one.getBody()).contains("\"user_recipe_id\":" + pendingId);
 
         // 4. admin 가입 + role 승급 + 재로그인
         signup("admin@b.c", "admin");
         promoteToAdmin("admin@b.c");
         String adminToken = login("admin@b.c");
 
-        // 5. 승인 (단일 PATCH) → recipes INSERT + recipe_stats(0,0) 트리거. 응답은 PendingRecipeResponse
+        // 5. 승인 (단일 PATCH) → recipes INSERT + recipe_stats(0,0) 트리거. 응답은 UserRecipeResponse
         ResponseEntity<String> approve = patchJson(
-                "/api/v1/admin/pending-recipes/" + pendingId,
+                "/api/v1/admin/user-recipes/" + pendingId,
                 "{\"status\":\"APPROVED\",\"admin_note\":\"양호\"}",
                 adminToken);
         assertThat(approve.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -99,8 +99,8 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
                 .contains("\"is_scrapped\":true")
                 .contains("\"is_liked\":true");
 
-        // 10. alice 의 /api/v1/pending-recipes → status=APPROVED 로 갱신됨 (pending row 보존)
-        ResponseEntity<String> aliceMy = get("/api/v1/pending-recipes", aliceToken);
+        // 10. alice 의 /api/v1/user-recipes → status=APPROVED 로 갱신됨 (pending row 보존)
+        ResponseEntity<String> aliceMy = get("/api/v1/user-recipes", aliceToken);
         assertThat(aliceMy.getBody()).contains("\"status\":\"APPROVED\"");
 
         // 11. 탈퇴 후 alice 닉네임 치환 검증
@@ -126,17 +126,17 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
     void approveIncompleteFails() {
         String alice = signup("a@b.c", "alice");
         // 최소 필드만 (description / ingredients_raw / servings / cooking_time / difficulty / category 누락)
-        String submitBody = postJson("/api/v1/pending-recipes",
+        String submitBody = postJson("/api/v1/user-recipes",
                 "{\"title\":\"미완성\",\"content\":\"본문\"}", alice).getBody();
         long pendingId = Long.parseLong(
-                AuthCookieIntegrationTest.extractField(submitBody, "pending_recipe_id"));
+                AuthCookieIntegrationTest.extractField(submitBody, "user_recipe_id"));
 
         signup("admin@b.c", "admin");
         promoteToAdmin("admin@b.c");
         String adminToken = login("admin@b.c");
 
         ResponseEntity<String> res = patchJson(
-                "/api/v1/admin/pending-recipes/" + pendingId, "{\"status\":\"APPROVED\"}", adminToken);
+                "/api/v1/admin/user-recipes/" + pendingId, "{\"status\":\"APPROVED\"}", adminToken);
         assertThat(res.getStatusCode().value()).isEqualTo(400);
         assertThat(res.getBody())
                 .contains("\"code\":\"PENDING_RECIPE_INCOMPLETE\"")
@@ -149,12 +149,12 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
         // 레시피 1건 확보 (submit → approve)
         String alice = signup("alice@b.c", "alice");
         long pendingId = Long.parseLong(AuthCookieIntegrationTest.extractField(
-                postJson("/api/v1/pending-recipes", fullRecipeBody("좋아요대상"), alice).getBody(),
-                "pending_recipe_id"));
+                postJson("/api/v1/user-recipes", fullRecipeBody("좋아요대상"), alice).getBody(),
+                "user_recipe_id"));
         signup("admin@b.c", "admin");
         promoteToAdmin("admin@b.c");
         String adminToken = login("admin@b.c");
-        patchJson("/api/v1/admin/pending-recipes/" + pendingId,
+        patchJson("/api/v1/admin/user-recipes/" + pendingId,
                 "{\"status\":\"APPROVED\"}", adminToken);
         long recipeId = recipeIdByTitle("좋아요대상");
 
@@ -190,30 +190,30 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("제출 레시피 soft delete → 200 메시지, 목록에서 제외, 재삭제 시 404")
-    void softDeletePendingRecipe() {
+    void softDeleteUserRecipe() {
         String alice = signup("a@b.c", "alice");
-        String body = postJson("/api/v1/pending-recipes",
+        String body = postJson("/api/v1/user-recipes",
                 fullRecipeBody("삭제대상"), alice).getBody();
-        long id = Long.parseLong(AuthCookieIntegrationTest.extractField(body, "pending_recipe_id"));
+        long id = Long.parseLong(AuthCookieIntegrationTest.extractField(body, "user_recipe_id"));
 
         // 삭제 → 200 + 메시지
-        ResponseEntity<String> del = client.delete().uri("/api/v1/pending-recipes/" + id)
+        ResponseEntity<String> del = client.delete().uri("/api/v1/user-recipes/" + id)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + alice)
                 .retrieve().toEntity(String.class);
         assertThat(del.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(del.getBody()).contains("삭제되었습니다");
 
         // 목록에서 제외 (is_active=false)
-        ResponseEntity<String> list = get("/api/v1/pending-recipes", alice);
+        ResponseEntity<String> list = get("/api/v1/user-recipes", alice);
         assertThat(list.getBody()).doesNotContain("삭제대상");
 
         // 단건 조회 → 404
-        ResponseEntity<String> one = get("/api/v1/pending-recipes/" + id, alice);
+        ResponseEntity<String> one = get("/api/v1/user-recipes/" + id, alice);
         assertThat(one.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(one.getBody()).contains("\"code\":\"PENDING_RECIPE_NOT_FOUND\"");
 
         // 이미 삭제된 것 재삭제 → 404
-        ResponseEntity<String> del2 = client.delete().uri("/api/v1/pending-recipes/" + id)
+        ResponseEntity<String> del2 = client.delete().uri("/api/v1/user-recipes/" + id)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + alice)
                 .retrieve().toEntity(String.class);
         assertThat(del2.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -225,9 +225,9 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
         // 미완성 제출 (description/ingredients/... 누락)
         String alice = signup("alice@b.c", "alice");
         long pendingId = Long.parseLong(AuthCookieIntegrationTest.extractField(
-                postJson("/api/v1/pending-recipes",
+                postJson("/api/v1/user-recipes",
                         "{\"title\":\"보정대상\",\"content\":\"본문\"}", alice).getBody(),
-                "pending_recipe_id"));
+                "user_recipe_id"));
 
         signup("admin@b.c", "admin");
         promoteToAdmin("admin@b.c");
@@ -235,7 +235,7 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
 
         // 1) 콘텐츠만 부분 수정 (status 미포함) → 200, status 는 PENDING 유지
         ResponseEntity<String> edited = patchJson(
-                "/api/v1/admin/pending-recipes/" + pendingId,
+                "/api/v1/admin/user-recipes/" + pendingId,
                 "{\"description\":\"보정된 설명\",\"admin_note\":\"검토중\"}", adminToken);
         assertThat(edited.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(edited.getBody())
@@ -252,7 +252,7 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
                  "video_url":"https://youtu.be/abcdefghijk"}
                 """;
         ResponseEntity<String> approved = patchJson(
-                "/api/v1/admin/pending-recipes/" + pendingId, fill, adminToken);
+                "/api/v1/admin/user-recipes/" + pendingId, fill, adminToken);
         assertThat(approved.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(approved.getBody()).contains("\"status\":\"APPROVED\"");
 
@@ -279,7 +279,7 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
     @DisplayName("USER 토큰으로 admin endpoint → 403 + ErrorResponse(FORBIDDEN)")
     void userTokenRejectedFromAdmin() {
         String token = signup("a@b.c", "alice");
-        ResponseEntity<String> res = client.get().uri("/api/v1/admin/pending-recipes")
+        ResponseEntity<String> res = client.get().uri("/api/v1/admin/user-recipes")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve().toEntity(String.class);
 
@@ -290,7 +290,7 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
     // ─── 헬퍼 ───────────────────────────────────────────────
 
     private String signup(String email, String nickname) {
-        String body = "{\"email\":\"%s\",\"password\":\"pw12345A\",\"nickname\":\"%s\"}"
+        String body = "{\"username\":\"%s\",\"password\":\"pw12345A\",\"nickname\":\"%s\"}"
                 .formatted(email, nickname);
         ResponseEntity<String> response = postJson("/api/v1/auth/signup", body, null);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -298,14 +298,14 @@ class RecipeFlowIntegrationTest extends IntegrationTestSupport {
     }
 
     private String login(String email) {
-        String body = "{\"email\":\"%s\",\"password\":\"pw12345A\"}".formatted(email);
+        String body = "{\"username\":\"%s\",\"password\":\"pw12345A\"}".formatted(email);
         ResponseEntity<String> response = postJson("/api/v1/auth/login", body, null);
         return AuthCookieIntegrationTest.extractField(response.getBody(), "access_token");
     }
 
     private void promoteToAdmin(String email) {
         transactionTemplate.executeWithoutResult(s ->
-                entityManager.createNativeQuery("UPDATE users SET role='ADMIN' WHERE email = :e")
+                entityManager.createNativeQuery("UPDATE users SET role='ADMIN' WHERE username = :e")
                         .setParameter("e", email).executeUpdate());
     }
 

@@ -42,33 +42,41 @@ public class UserProfile {
     @Builder.Default
     private List<String> userInput = List.of();
 
+    // DBv5: 아래 모든 JSON 컬럼은 NOT NULL DEFAULT '[]'. Hibernate INSERT 시 null 가지 않도록 빈 List 디폴트.
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    private List<String> allergies;
+    @Column(columnDefinition = "jsonb", nullable = false)
+    @Builder.Default
+    private List<String> allergies = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "dietary_restrictions", columnDefinition = "jsonb")
-    private List<String> dietaryRestrictions;
+    @Column(name = "dietary_restrictions", columnDefinition = "jsonb", nullable = false)
+    @Builder.Default
+    private List<String> dietaryRestrictions = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "preferred_ingredients", columnDefinition = "jsonb")
-    private List<String> preferredIngredients;
+    @Column(name = "preferred_ingredients", columnDefinition = "jsonb", nullable = false)
+    @Builder.Default
+    private List<String> preferredIngredients = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "disliked_ingredients", columnDefinition = "jsonb")
-    private List<String> dislikedIngredients;
+    @Column(name = "disliked_ingredients", columnDefinition = "jsonb", nullable = false)
+    @Builder.Default
+    private List<String> dislikedIngredients = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "preferred_categories", columnDefinition = "jsonb")
-    private List<String> preferredCategories;
+    @Column(name = "preferred_categories", columnDefinition = "jsonb", nullable = false)
+    @Builder.Default
+    private List<String> preferredCategories = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "frequently_used_ingredients", columnDefinition = "jsonb")
-    private List<String> frequentlyUsedIngredients;
+    @Column(name = "frequently_used_ingredients", columnDefinition = "jsonb", nullable = false)
+    @Builder.Default
+    private List<String> frequentlyUsedIngredients = List.of();
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "taste_keywords", columnDefinition = "jsonb")
-    private List<String> tasteKeywords;
+    @Column(name = "taste_keywords", columnDefinition = "jsonb", nullable = false)
+    @Builder.Default
+    private List<String> tasteKeywords = List.of();
 
     /** "easy" / "normal" / "hard" 또는 null */
     @Column(name = "cooking_skill", length = 10)
@@ -81,8 +89,9 @@ public class UserProfile {
     private BigDecimal servingSize;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "recent_recipe_ids", columnDefinition = "jsonb")
-    private List<Integer> recentRecipeIds;
+    @Column(name = "recent_recipe_ids", columnDefinition = "jsonb", nullable = false)
+    @Builder.Default
+    private List<Integer> recentRecipeIds = List.of();
 
     @Column(name = "ai_analyzed_at")
     private ZonedDateTime aiAnalyzedAt;

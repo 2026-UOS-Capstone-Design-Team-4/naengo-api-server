@@ -86,7 +86,7 @@ class SocialAuthIntegrationTest extends IntegrationTestSupport {
         // 자체 회원가입 (LOCAL)
         client.post().uri("/api/v1/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"email\":\"dup@kakao.com\",\"password\":\"pw12345A\",\"nickname\":\"dupuser\"}")
+                .body("{\"username\":\"dup@kakao.com\",\"password\":\"pw12345A\",\"nickname\":\"dupuser\"}")
                 .retrieve().toBodilessEntity();
 
         // 같은 이메일로 카카오 로그인 시도
@@ -128,12 +128,12 @@ class SocialAuthIntegrationTest extends IntegrationTestSupport {
     }
 
     /**
-     * V5 분리 이후 — provider_id 는 users 가 아닌 social_accounts.provider_user_id 에 보관.
+     * V5 분리 이후 — provider_id 는 users 가 아닌 user_identities.provider_user_id 에 보관.
      * 같은 외부 카카오 계정에 대해 우리 user 가 몇 개 link 됐는지 (중복 가입 없는지) 검증.
      */
     private long userCountByProviderId(String providerUserId) {
         Number n = (Number) entityManager.createNativeQuery(
-                        "SELECT count(*) FROM social_accounts WHERE provider = 'KAKAO' AND provider_user_id = :pid")
+                        "SELECT count(*) FROM user_identities WHERE provider = 'KAKAO' AND provider_user_id = :pid")
                 .setParameter("pid", providerUserId).getSingleResult();
         return n.longValue();
     }

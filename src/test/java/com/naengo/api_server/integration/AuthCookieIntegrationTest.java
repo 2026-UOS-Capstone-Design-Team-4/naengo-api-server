@@ -21,10 +21,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AuthCookieIntegrationTest extends IntegrationTestSupport {
 
     private static final String SIGNUP = """
-            {"email":"a@b.c","password":"pw12345A","nickname":"alice"}
+            {"username":"a@b.c","password":"pw12345A","nickname":"alice"}
             """;
     private static final String LOGIN = """
-            {"email":"a@b.c","password":"pw12345A"}
+            {"username":"a@b.c","password":"pw12345A"}
             """;
 
     @Test
@@ -76,7 +76,7 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
                 .retrieve().toEntity(String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("\"email\":\"a@b.c\"");
+        assertThat(response.getBody()).contains("\"username\":\"a@b.c\"");
     }
 
     @Test
@@ -89,7 +89,7 @@ class AuthCookieIntegrationTest extends IntegrationTestSupport {
                 .retrieve().toEntity(String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("\"email\":\"a@b.c\"");
+        assertThat(response.getBody()).contains("\"username\":\"a@b.c\"");
     }
 
     @Test
