@@ -94,10 +94,10 @@
 | # | 상대 | 안건 | 상태 |
 |---|---|---|---|
 | C0 | **DB 팀원** | **V4(레시피 정규화) + V5(users 컬럼 제거) 적용 예정 통지 + RDS 사전 점검 협의** | ✅ |
-| C1 | AI 팀 | V5 후 AI 코드가 `users.provider`/`provider_id` 컬럼을 SELECT 한 적 있다면 `social_accounts` JOIN 으로 전환 필요 | ⏸ |
-| C2 | AI 팀 | 레시피 정규화(B) 합동 컷오버 일정 — 단독 배포 시 양 서버 장애 | ⏸ |
+| C1 | AI 팀 | V5 후 AI 코드가 `users.provider`/`provider_id` 컬럼을 SELECT 한 적 있다면 `user_identities` JOIN 으로 전환 필요 | 🚫 N/A — 옵션 A 채택으로 DBv5 의 users 에 그 컬럼 자체가 없음. AI 가 SELECT 할 가능성 0 |
+| C2 | AI 팀 | 레시피 정규화 합동 컷오버 일정 | ✅ 사실상 완료 — DB 팀원이 DBv5(정규화 완성형) 적용 + AI 003/004/005 적용 + 우리 옵션 A align. 양측 모두 DBv5 위에서 동작 |
 | C3 | AI 팀 | `JWT_SECRET` 운영 값 동일 공유 (D-2). 옵션 (a) 채택: 현 값 그대로 AI 에 전달 (64자 base64). AI 가 받은 후 자기 Secrets Manager 저장 + 서비스 재시작 → login 토큰을 AI endpoint 호출에 전달 검증 | 🟡 전달 대기 |
-| C4 | front/AI | `/me/profile` 변경 의미 합의 (PATCH 교체 vs POST/DELETE) | ⏸ |
+| C4 | front/AI | `/me/profile` 변경 의미 합의 (우리 PATCH 교체 vs AI POST/DELETE) | 🟢 우리 측 작업 0 — front 가 우리 endpoint 호출 시 PATCH 정합. AI 의 POST/DELETE 와 둘 다 살아 있으므로 front 가 어느 쪽 채택할지만 자기 결정 |
 
 ---
 
