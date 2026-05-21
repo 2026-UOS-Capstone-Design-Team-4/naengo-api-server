@@ -69,7 +69,7 @@
 | B2-e | CI build-and-push job → ECR 이미지 푸시 | 🟡 | trust 정정 후 재실행(attempt 2): OIDC ✓ / ECR login ✓ / Buildx ✓ / **Build and push 가 `useradd exit 4` 로 실패** — runtime base 가 UID 1000 점유. UID/GID 10001 로 정정 (Dockerfile 수정). 다음 push 로 재트리거 |
 | B3 | Secrets Manager 3종 생성 + ECS Execution Role 권한 | 🟡 | secret 생성 ✅. Execution Role 권한은 B4 와 함께 |
 | B3-a | `naengo/prod/db` (DB_URL/DB_USERNAME/DB_PASSWORD) | ✅ | ARN: `...:secret:naengo/prod/db-iUa2In`. 값 = `.env` 정정된 것 그대로 |
-| B3-b | `naengo/prod/jwt` (JWT_SECRET) | ✅ | ARN: `...:secret:naengo/prod/jwt-9m02fH`. **현재 dev 값** — C3 합의(AI 팀 동일 값) 후 `update-secret` 로 교체 필요 |
+| B3-b | `naengo/prod/jwt` (JWT_SECRET) | ✅ | ARN: `...:secret:naengo/prod/jwt-9m02fH`. C3 (a) 채택: 현 값을 그대로 AI 팀에 전달 → 양측 동일 SECRET. 이후 rotate 시 양측 동시 update + ECS restart |
 | B3-c | `naengo/prod/kakao` (KAKAO_REST_API_KEY/KAKAO_REDIRECT_URI) | ✅ | ARN: `...:secret:naengo/prod/kakao-8yZdEV`. **KAKAO_REDIRECT_URI 는 localhost placeholder** — A2(운영 도메인 결정) 후 update 필요 |
 | B3-d | ECS Task Execution Role 에 `secretsmanager:GetSecretValue` 부여 | ⏸ | B4 (Task Definition) 와 함께 처리. role 자체가 계정에 없으면 ECS 첫 클러스터 생성 시 자동 생성됨 |
 | B4 | ECS Cluster + Task Definition + Service (Fargate) | 🟡 | 진행 중 — sub items 아래 |
@@ -96,7 +96,7 @@
 | C0 | **DB 팀원** | **V4(레시피 정규화) + V5(users 컬럼 제거) 적용 예정 통지 + RDS 사전 점검 협의** | ✅ |
 | C1 | AI 팀 | V5 후 AI 코드가 `users.provider`/`provider_id` 컬럼을 SELECT 한 적 있다면 `social_accounts` JOIN 으로 전환 필요 | ⏸ |
 | C2 | AI 팀 | 레시피 정규화(B) 합동 컷오버 일정 — 단독 배포 시 양 서버 장애 | ⏸ |
-| C3 | AI 팀 | `JWT_SECRET` 운영 값 동일 공유 (D-2) | ⏸ |
+| C3 | AI 팀 | `JWT_SECRET` 운영 값 동일 공유 (D-2). 옵션 (a) 채택: 현 값 그대로 AI 에 전달 (64자 base64). AI 가 받은 후 자기 Secrets Manager 저장 + 서비스 재시작 → login 토큰을 AI endpoint 호출에 전달 검증 | 🟡 전달 대기 |
 | C4 | front/AI | `/me/profile` 변경 의미 합의 (PATCH 교체 vs POST/DELETE) | ⏸ |
 
 ---
@@ -119,7 +119,7 @@
 
 남은 작업:
 1. **B5 / A2 / A3** — 운영 도메인 결정 후 ACM + Route53 + listener:443 부착 → 그 시점에 `update-secret` 으로 KAKAO_REDIRECT_URI prod 값 교체 + CORS 좁힘
-2. **C3** — AI 와 `JWT_SECRET` 동일 값 합의 → `update-secret naengo/prod/jwt`
+2. **C3** — 옵션 (a) 채택. 우리 현 `JWT_SECRET` 그대로 AI 에 안전 채널 전달 → AI 측 적용 후 토큰 cross-verify (login 토큰 → AI endpoint 호출)
 3. **D3** — CloudWatch billing alarm + 5xx 율 + 인증실패 율 monitoring
 4. **D4** — IAM 사용자 권한 좁히기 (현 AdministratorAccess → ECR/Secrets/ECS/RDS-describe 만)
 
