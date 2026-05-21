@@ -35,7 +35,7 @@ public class UserProfile {
 
     @Id
     @Column(name = "user_id")
-    private Long userId;
+    private Integer userId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "user_input", columnDefinition = "jsonb", nullable = false)
@@ -82,7 +82,7 @@ public class UserProfile {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "recent_recipe_ids", columnDefinition = "jsonb")
-    private List<Long> recentRecipeIds;
+    private List<Integer> recentRecipeIds;
 
     @Column(name = "ai_analyzed_at")
     private ZonedDateTime aiAnalyzedAt;
@@ -91,7 +91,7 @@ public class UserProfile {
     private ZonedDateTime updatedAt;
 
     /** 빈 default — 신규 사용자가 처음 PUT 할 때 사용. updated_at NOT NULL 충족. */
-    public static UserProfile empty(Long userId) {
+    public static UserProfile empty(Integer userId) {
         return UserProfile.builder()
                 .userId(userId)
                 .userInput(List.of())
