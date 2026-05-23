@@ -78,14 +78,22 @@
 | ECS 가 즉시 감지 못 함 | 우리 — healthcheck path `/` 가 DB 미접근 (재발 방지 §6) |
 | Alarm 발화 안 됨 | 우리 (사용자 트래픽 부재로 5xx 누적 미달) + healthcheck 사각 |
 
-## 5. 복구 계획
+## 5. 복구 결과 (2026-05-23)
 
-| Step | 액션 | 위험 |
+| Step | 액션 | 결과 |
 |---|---|---|
-| 1 | DB 팀원과 원인 확인 + AI 팀 적재 데이터 손실 가능성 통보 | - |
-| 2 | (필요 시) RDS 스냅샷 시점 복원 OR DBv5.sql 다시 적용 | 🟡 AI 데이터 손실 |
-| 3 | ECS force-new-deployment → Flyway 재baseline (clean schema 면 V1=DBv5 자동 적용) | 🟢 |
-| 4 | `scripts/e2e-smoke-prod.sh` 운영 BASE 로 재실행 → 33/33 확인 | 🟢 |
+| 1 | DB 팀원과 원인 확인 + AI 팀 적재 데이터 손실 가능성 통보 | ✅ |
+| 2 | DBv5.sql 재적용 (DB 팀원이 직접) | ✅ |
+| 3 | ECS 상태 확인 — task RUNNING 유지, schema 인지 정상 | ✅ |
+| 4 | `scripts/e2e-smoke-prod.sh` 운영 BASE 재실행 | ✅ **32/33 PASS** (1건은 HTTPS 미부착 의존성, 코드 무관) |
+
+### 32/33 의 내역
+
+- 통과 32건: signup/login/duplicate/validation/Bearer 인증/users/me 필드/닉네임 변경+충돌/비번 변경+오답/프로필 GET·PATCH/선호도/카카오 invalid/로그아웃 멱등/탈퇴+토큰 차단+username 차단
+- 실패 1건: **#23 cookie-based auth**
+  - 원인: `application-prod.yml` 의 `auth.cookie.secure: true` + 운영 ALB 가 HTTP 80 만 → `Secure` 쿠키를 HTTP 요청에 동봉 거부 → 401
+  - **의도된 동작.** B5 (도메인 + HTTPS) 부착 시 자연 해결
+  - 실서비스 영향 0 (front/admin 모두 Bearer 헤더 우선 사용)
 
 ## 6. 재발 방지
 
