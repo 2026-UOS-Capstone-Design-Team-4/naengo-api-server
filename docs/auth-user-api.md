@@ -2,10 +2,19 @@
 
 > 대상: front / admin / AI 서버 담당자
 > 범위: **회원가입 · 로그인 · 카카오 소셜 · 로그아웃 · 마이페이지 · 회원탈퇴 · 프로필**
-> 상태: **운영 배포 완료** (2026-05-21, 옵션 A — DBv5 정합. 통합테스트 30/30 PASS)
-> 작성: API 서버 담당자 · 진실원본: 본 문서 + [`changes/2026-05-21-option-a-contract-diff.md`](changes/2026-05-21-option-a-contract-diff.md)
+> 상태: **운영 배포 완료** (2026-05-26 HTTPS 부착 + 운영 e2e 33/33 PASS, 옵션 A — DBv5 정합)
+> 작성: API 서버 담당자 · 진실원본: 본 문서 + [`changes/2026-05-21-option-a-contract-diff.md`](changes/2026-05-21-option-a-contract-diff.md) + [`changes/2026-05-23-cross-team-actual-routing.md`](changes/2026-05-23-cross-team-actual-routing.md)
 >
-> **2026-05-21 변경점 요약** (옵션 A 채택):
+> **⚠️ 2026-05-26 라우팅 대전환 — 실 호출 현황 (본 문서의 모든 endpoint 가 우리에게 호출되는 게 아님)**
+> 본 문서는 우리 서버가 **구현·노출** 하는 endpoint 명세. 그러나 5/26 시점 front 가 거의 모든 endpoint 를 AI(`baseUrl`) 로 호출 변경. **우리에게 실 호출되는 endpoint = `/auth/*` 4개만**:
+> - `POST /auth/social/kakao` (front 모바일)
+> - `POST /auth/logout` (front 모바일)
+> - `POST /auth/signup` (admin LOCAL 가입, vercel proxy)
+> - `POST /auth/login` (admin LOCAL 로그인, vercel proxy)
+>
+> §5~§10 의 `/users/me*`, `/user-recipes*` 등은 **우리 구현 살아있으나 호출자 0** (front 가 AI 로 routing). 책임 분담 자세히: [`changes/2026-05-23-cross-team-actual-routing.md`](changes/2026-05-23-cross-team-actual-routing.md). 폐기 검토는 운영 1~2주 안정화 후 단계 PR 예정.
+>
+> **2026-05-21 변경점 요약** (옵션 A 채택, 우리 구현 기준):
 > - signup/login `email` → **`username`** (필드명 변경, validation 3~255자)
 > - `/api/v1/users/me` 응답 `email` → **`username`** + `deleted_at` 제거
 > - `/api/v1/[admin/]pending-recipes` → **`/api/v1/[admin/]user-recipes`** (path 변경)
@@ -291,7 +300,7 @@ AI 분석 7필드 + `ai_analyzed_at` 는 **read-only** (AI 서버가 채움).
 
 ### 11.1 흐름 B — 카카오 소셜 로그인 (front/모바일) ★ 핵심
 
-> 서버 측은 구현·테스트 완료(통합 30건 + 로컬 e2e 26/26 + 카카오 브라우저 e2e). **남은 건 클라이언트 SDK 연동.**
+> 서버 측은 구현·테스트 완료(통합 30건 + 로컬 e2e 33/33 + 운영 e2e 33/33 2026-05-26). **클라이언트 SDK 연동도 front 측 구현 확인 완료** (`naengo_api_service.dart` L77 `socialLoginKakao` → `$_authBase/api/v1/auth/social/kakao`).
 > 서버는 카카오 access token 을 발급/교환하지 않는다 — **클라이언트가 카카오 SDK 로 받은 access token 을 그대로 전달**하면 서버가 검증·계정생성·자체 JWT 발급.
 
 ```
@@ -315,18 +324,31 @@ AI 분석 7필드 + `ai_analyzed_at` 는 **read-only** (AI 서버가 채움).
   - `409 EMAIL_PROVIDER_CONFLICT` — 같은 이메일이 자체(LOCAL) 가입됨 → "기존 이메일/비번 로그인 사용" 안내
 - 콘솔 사전 설정(앱/플랫폼/동의): [`kakao-oauth-runbook.md §1`](kakao-oauth-runbook.md).
 
-### 11.2 naengo-front (Flutter)
-- 인증/사용자/프로필 호출은 **API 서버**(`{API_SERVER}/api/v1/...`). (SSE 채팅만 AI 서버)
-- 카카오: §11.1 흐름. 응답 `access_token` 저장 → 모든 요청 `Authorization: Bearer <access_token>`
-- 401 수신 시 토큰 폐기 + 로그인 화면. 로그아웃은 `POST /api/v1/auth/logout` + 로컬 토큰 폐기(서버는 stateless라 토큰 자체는 만료까지 유효).
-- 모든 응답 키 **snake_case** 파싱 (`user_id`, `is_active`, `created_at`, `user_input` …).
+### 11.2 naengo-front (Flutter) — 2026-05-26 라우팅 대전환 후
 
-### 11.3 naengo-admin (React)
-- `VITE_API_URL` → API 서버. axios 기본 base `{...}/api/v1`
-- 관리자 화면은 ADMIN role 계정으로 로그인 후 JWT 첨부 (axios interceptor)
+| 호출 분담 | 도착 서버 | endpoint |
+|---|---|---|
+| `_authBase` (= `NAENGO_SPRING_BASE`, 우리) | `https://api.naengo.com` | `POST /auth/social/kakao`, `POST /auth/logout` |
+| `baseUrl` (= `NAENGO_API_BASE`, AI) | `https://ai.naengo.com` 또는 AI IP | chat/recipes/users/me/user-recipes/scraps/likes/guest_chat 등 나머지 전부 |
 
-### 11.4 naengo-ai (FastAPI)
-- API 서버가 발급한 JWT 를 **같은 secret(`JWT_SECRET`)** 으로 검증 → `sub`(=user_id) 추출. (Phase 0-1 / D-2 — secret 공유 합의 필요. `deploy-env.md §2`)
+- 카카오 흐름은 §11.1. 응답 `access_token` 저장 → **양 서버 모두** `Authorization: Bearer <access_token>` 첨부 (AI 도 우리 JWT 검증 — C5 closed)
+- 401 수신 시 토큰 폐기 + 로그인 화면. 로그아웃은 `POST /auth/logout` + 로컬 토큰 폐기
+- 모든 응답 키 **snake_case** 파싱
+
+### 11.3 naengo-admin (React, Vercel)
+
+- **Vercel rewrite proxy 패턴** 채택 — 브라우저는 자기 origin 에만 호출, Vercel 서버가 server-to-server 로 proxy → **CORS 회피**
+- `vercel.json` rewrites:
+  - `/auth-api/*` → 우리 (`POST /auth/signup`, `POST /auth/login` LOCAL 관리자 가입/로그인용)
+  - `/api/*` → AI (chat/recipes/admin 등)
+- ⚠️ 현재 `/auth-api` destination 이 HTTP ALB DNS 옛 값 — `https://api.naengo.com` 으로 갱신 권장 (C9, admin 팀)
+
+### 11.4 naengo-ai (FastAPI) — C5 closed (2026-05-26)
+
+- `app/api/v1/deps.py::get_current_user_id` 에서 `HTTPBearer` + `HS512` decode 적용. `TEMP_USER_ID` placeholder 제거 완료
+- API 서버가 발급한 JWT 를 **동일 `JWT_SECRET`** 으로 검증 → `int(payload["sub"])` 로 user_id 추출
+- cross-team smoke 통과: 우리 signup → user_id=9 JWT → AI `GET /users/me` 200 + user_id=9 회신
+- secret 공유는 옵션 (a) 채택: 현 값 그대로 양측 동기. rotate 시 양측 동시 update + 서비스 재시작 필수
 
 ---
 
@@ -345,7 +367,7 @@ AI 분석 7필드 + `ai_analyzed_at` 는 **read-only** (AI 서버가 채움).
 | 로컬 e2e (이전, 옵션 A 이전 코드) | ✅ 2026-05-18 — 카카오 가입(브라우저) + 회원가입/로그인/로그아웃/닉네임·비번 변경/프로필/차단/탈퇴(chat soft-delete) **26/26 PASS** (참고용 기록) |
 | 로컬 카카오 브라우저 e2e | ✅ 2026-05-18 ([`kakao-oauth-runbook §3`](kakao-oauth-runbook.md)) |
 | **운영 e2e (옵션 A + DB 복구 + HTTPS)** | ✅ 2026-05-26 — **33/33 PASS** (`https://api.naengo.com`). Bearer + Cookie 둘 다 동작. B5 (HTTPS 부착) 자세한 진행: [`changes/2026-05-26-b5-https-api-naengo-com.md`](changes/2026-05-26-b5-https-api-naengo-com.md). 직전 32/33 (2026-05-23 HTTP) 이력 + DB 복구 사고 진단: [`changes/2026-05-22-prod-users-table-missing.md`](changes/2026-05-22-prod-users-table-missing.md) |
-| 운영 카카오 키 / 흐름 B | ⬜ 도메인 + HTTPS 부착 후 (`KAKAO_REST_API_KEY` 운영값은 Secrets Manager 에 적재 완료. `KAKAO_REDIRECT_URI` 는 도메인 결정 후 update + 카카오 콘솔 등록) |
-| 탈퇴 시 chat 메시지 hard delete/PII 스크럽 | ⬜ AI 서버 합의 후 승격 |
+| 운영 카카오 키 / 흐름 B | ✅ `KAKAO_REST_API_KEY` 운영값 Secrets Manager 적재. `KAKAO_REDIRECT_URI` 는 🚫 N/A (front 모바일 only — 서버측 redirect 미사용, 카카오 SDK 가 access_token 직접 발급) |
+| 탈퇴 시 chat 메시지 hard delete/PII 스크럽 | ⬜ AI 서버 합의 후 승격 ([`changes/chat-withdrawal-ai-agreement.md`](changes/chat-withdrawal-ai-agreement.md)) |
 
-상세 결정 이력: [`spec/user-domain-todo.md`](spec/user-domain-todo.md)
+상세 결정 이력: [`archive/spec/user-domain-todo.md`](archive/spec/user-domain-todo.md)
