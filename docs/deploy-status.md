@@ -1,4 +1,4 @@
-# 배포 진척 추적 (2026-05-20 시작)
+# 배포 진척 추적 (2026-05-21 시작)
 
 > 채팅 컨텍스트가 사라져도 다음 세션에서 즉시 이어갈 수 있도록, 본인 수행
 > 액션 / 입력값 / 의존성 / 막힌 지점을 한 페이지에 모은다. 절차 자체는
@@ -22,13 +22,13 @@
 | DB 운영 주체 | 팀원 (V5 의 users 컬럼 변경 반영 받음) |
 | SSL 옵션 결정 | A — Dockerfile 에 RDS CA 번들 포함 + `sslmode=verify-full` |
 | ECS Cluster | `arn:aws:ecs:ap-northeast-2:518056141724:cluster/naengo` (name: `naengo`) |
-| ECS Task Definition | `arn:aws:ecs:ap-northeast-2:518056141724:task-definition/naengo-api-server:1` (family `naengo-api-server`, rev 1) |
+| ECS Task Definition | `naengo-api-server:2` (옵션 A 후 SHA `8cbea88...` pin. rev 1 은 옵션 A 이전 폐기) |
 | ECS Task Execution Role | `arn:aws:iam::518056141724:role/ecsTaskExecutionRole` (managed `AmazonECSTaskExecutionRolePolicy` + inline `naengo-secrets-fetch`) |
-| ECS Service 이름 | (미정 — B4-f) |
+| ECS Service 이름 | `naengo-api-server` (desired=1, assignPublicIp=ENABLED) |
 | CloudWatch Log Group | `/ecs/naengo-api-server` (30일 보존) |
 | Default VPC | `vpc-038c8eb56e23d5bb5` (172.31.0.0/16) — RDS 와 동일 VPC |
 | Public subnets (4 AZ) | `subnet-0609c0a1180692f1d` (a) / `subnet-0417a2a8b7cb1c616` (b) / `subnet-0752c9e933903abf3` (c) / `subnet-057d3291db1e11d00` (d) |
-| ALB SG | `sg-0f143ba6a8d9997d2` (`naengo-api-server-alb-sg`, inbound 80 from 0.0.0.0/0) |
+| ALB SG | `sg-0f143ba6a8d9997d2` (`naengo-api-server-alb-sg`, inbound 80 + 443 from 0.0.0.0/0) |
 | ECS task SG | `sg-0001862a6ba20c4cf` (`naengo-api-server-ecs-sg`, inbound 8080 from ALB SG) |
 | RDS SG | `sg-0898460971d5b8d04` (inbound 5432 from `ec2-rds-1` + 우리 ECS SG) |
 | ALB ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:loadbalancer/app/naengo-api-server-alb/159ba31da2dc086e` |
@@ -42,8 +42,7 @@
 | SNS billing topic | `arn:aws:sns:us-east-1:518056141724:naengo-billing-alerts` (subscription: ppoobb94471@gmail.com, ✅ Confirmed 2026-05-22) |
 | SNS ops topic | `arn:aws:sns:ap-northeast-2:518056141724:naengo-ops-alerts` (subscription: ppoobb94471@gmail.com, ✅ Confirmed 2026-05-22) |
 | CloudWatch alarms (4종) | `naengo-billing-over-20-usd`(us-east-1) / `naengo-alb-target-5xx` / `naengo-tg-unhealthy-host` / `naengo-rds-cpu-high`(ap-northeast-2) |
-| 운영 도메인 (`api.???`) | (미정) |
-| 카카오 운영 redirect URI | (미정) — 운영 도메인 결정 후 |
+| 카카오 운영 redirect URI | 🚫 N/A — front 모바일 only (카카오 SDK access_token 직접 호출). DevOAuthController 의 placeholder (`http://localhost:8080/oauth/kakao/test-callback`) 는 운영 미사용, 부팅 통과용 |
 | Secrets Manager ARN | `naengo/prod/db` = `arn:aws:secretsmanager:ap-northeast-2:518056141724:secret:naengo/prod/db-iUa2In` |
 | | `naengo/prod/jwt` = `arn:aws:secretsmanager:ap-northeast-2:518056141724:secret:naengo/prod/jwt-9m02fH` |
 | | `naengo/prod/kakao` = `arn:aws:secretsmanager:ap-northeast-2:518056141724:secret:naengo/prod/kakao-8yZdEV` |
@@ -55,10 +54,10 @@
 | # | 항목 | 상태 | 메모 |
 |---|---|---|---|
 | A1 | `.env` DB_URL `jdbc:` 접두사 + `user:pass@` 제거 | ✅ | host 만 남김 (`jdbc:postgresql://<host>:5432/<db>?sslmode=verify-full&sslrootcert=/app/global-bundle.pem`) |
-| A2 | `KAKAO_REDIRECT_URI` 운영 도메인으로 교체 | ⏸ | 운영 도메인 결정 후. 카카오 콘솔 등록값과 1글자 일치 필수 |
-| A3 | `CORS_ALLOWED_ORIGINS=*` 좁히기 | ⏸ | front/admin 운영 도메인 확정 후. 현재 임시 wildcard |
+| A2 | `KAKAO_REDIRECT_URI` 운영 도메인으로 교체 | 🚫 N/A | front 모바일 only — 카카오 SDK 로 access_token 직접 획득 후 `POST /auth/social/kakao` 흐름. 서버측 redirect URI 미사용. 현 placeholder 유지 (부팅 통과용) |
+| A3 | `CORS_ALLOWED_ORIGINS=*` 좁히기 | 🟡 보안 위생 차원만 | admin 이 vercel rewrite proxy 사용 → 브라우저 입장 same-origin → **CORS 영향 0**. front 는 모바일이라 면제. 실제 좁힐 필요 없으나 위생 차원 admin 운영 URL 확정 시 추가 권장 |
 | A4 | Dockerfile 에 RDS CA 번들 다운로드 단계 추가 (SSL 옵션 A) | ✅ | builder apt curl + runtime COPY. commit `1eaf4da` |
-| A5 | 빈 운영 env 채우기 (`AUTH_COOKIE_SAME_SITE`, `AWS_REGION`) | ⏸ | Secrets Manager 이관 단계와 함께 |
+| A5 | 빈 운영 env (`AUTH_COOKIE_SAME_SITE`, `AWS_REGION`) | ✅ | default 사용 — `application-prod.yml` 의 `${AUTH_COOKIE_SAME_SITE:Lax}` + `${AWS_REGION:ap-northeast-2}`. 운영 정상 동작 확인 (e2e 33/33 PASS) |
 | A6 | Spring Initializr 디폴트 정정 (`settings.gradle` rootProject.name, `build.gradle` group) | ✅ | `demo` → `naengo-api-server`, `com.example` → `com.naengo`. JAR 파일명 변경 — Dockerfile glob 안전 |
 
 ---
@@ -68,18 +67,18 @@
 | # | 항목 | 상태 | 메모 |
 |---|---|---|---|
 | B1 | ECR 리포 생성 | ✅ | Mutable / AES256 / Scan-on-push. URI 위 §0 참조 |
-| B2 | GitHub OIDC + IAM role + repo Secrets 3종 | 🟡 | 1차 CI test 30/30 PASS ✓ / build-and-push 가 OIDC AssumeRole 에서 실패 → **trust policy `sub` 가 placeholder `OWNER/REPO` 그대로였음**. 2026-05-21 `update-assume-role-policy` 로 실제 repo 경로(`repo:2026-UOS-Capstone-Design-Team-4/naengo-api-server:ref:refs/heads/main`) 로 정정. 워크플로 재실행 대기 |
+| B2 | GitHub OIDC + IAM role + repo Secrets 3종 | ✅ | 2026-05-21 완료. trust policy sub 정정 + Dockerfile UID 10001 정정 후 CI 통과. 이후 ECR 에 이미지 누적 중 |
 | B2-a | IAM identity provider (계정당 1회) | ✅ | `arn:aws:iam::518056141724:oidc-provider/token.actions.githubusercontent.com` |
 | B2-b | IAM role `github-actions-ecr-push` + trust + ecr-push policy | ✅ | trust = main 브랜치 only. 2026-05-21 sub 정정 |
 | B2-c | GitHub Secrets (`AWS_ROLE_TO_ASSUME` / `AWS_REGION` / `ECR_REPOSITORY`) | ✅ | 콘솔로 주입 |
 | B2-d | CI test job 30/30 PASS | ✅ | run 26194902810 / 26195691470 둘 다 test job 성공 |
-| B2-e | CI build-and-push job → ECR 이미지 푸시 | 🟡 | trust 정정 후 재실행(attempt 2): OIDC ✓ / ECR login ✓ / Buildx ✓ / **Build and push 가 `useradd exit 4` 로 실패** — runtime base 가 UID 1000 점유. UID/GID 10001 로 정정 (Dockerfile 수정). 다음 push 로 재트리거 |
-| B3 | Secrets Manager 3종 생성 + ECS Execution Role 권한 | 🟡 | secret 생성 ✅. Execution Role 권한은 B4 와 함께 |
+| B2-e | CI build-and-push job → ECR 이미지 푸시 | ✅ | Dockerfile UID 10001 정정 후 정상 push. 옵션 A 코드 SHA `8cbea88...` 운영 배포 중 |
+| B3 | Secrets Manager 3종 생성 + ECS Execution Role 권한 | ✅ | secret 3종 + Execution Role inline `naengo-secrets-fetch` 모두 완료 |
 | B3-a | `naengo/prod/db` (DB_URL/DB_USERNAME/DB_PASSWORD) | ✅ | ARN: `...:secret:naengo/prod/db-iUa2In`. 값 = `.env` 정정된 것 그대로 |
-| B3-b | `naengo/prod/jwt` (JWT_SECRET) | ✅ | ARN: `...:secret:naengo/prod/jwt-9m02fH`. C3 (a) 채택: 현 값을 그대로 AI 팀에 전달 → 양측 동일 SECRET. 이후 rotate 시 양측 동시 update + ECS restart |
-| B3-c | `naengo/prod/kakao` (KAKAO_REST_API_KEY/KAKAO_REDIRECT_URI) | ✅ | ARN: `...:secret:naengo/prod/kakao-8yZdEV`. **KAKAO_REDIRECT_URI 는 localhost placeholder** — A2(운영 도메인 결정) 후 update 필요 |
-| B3-d | ECS Task Execution Role 에 `secretsmanager:GetSecretValue` 부여 | ⏸ | B4 (Task Definition) 와 함께 처리. role 자체가 계정에 없으면 ECS 첫 클러스터 생성 시 자동 생성됨 |
-| B4 | ECS Cluster + Task Definition + Service (Fargate) | 🟡 | 진행 중 — sub items 아래 |
+| B3-b | `naengo/prod/jwt` (JWT_SECRET) | ✅ | ARN: `...:secret:naengo/prod/jwt-9m02fH`. C3 (a) 채택 — 양측 동일 SECRET 적용 + cross-team smoke 통과 (5/26) |
+| B3-c | `naengo/prod/kakao` (KAKAO_REST_API_KEY/KAKAO_REDIRECT_URI) | ✅ | ARN: `...:secret:naengo/prod/kakao-8yZdEV`. KAKAO_REDIRECT_URI 는 placeholder 유지 (A2 N/A — 모바일 only) |
+| B3-d | ECS Task Execution Role 에 `secretsmanager:GetSecretValue` 부여 | ✅ | `ecsTaskExecutionRole` 의 inline `naengo-secrets-fetch` policy 로 부여됨 |
+| B4 | ECS Cluster + Task Definition + Service (Fargate) | ✅ | 모든 sub item 완료. 옵션 A 후 Task Definition rev 2 운영 중 |
 | B4-a | ECS Cluster `naengo` 생성 | ✅ | ARN §0 |
 | B4-b | Task Execution Role + Secrets fetch 권한 + Log Group | ✅ | `ecsTaskExecutionRole` + inline `naengo-secrets-fetch` + `/ecs/naengo-api-server` |
 | B4-c | Task Definition 등록 (rev 1) | ✅ | image SHA pin `63bab5b9...`, cpu/mem 512/1024, env 2 + secrets 6, awslogs |
@@ -89,10 +88,8 @@
 | B4-g | 실행 확인 (Task running + TG healthy + `/` 200) | ✅ | Task `5da1ffd...` healthy, ALB DNS `/` 200 / `/api/v1/users/me` 401 / `POST /auth/signup` 201 + user_id=4 발급 + Set-Cookie 정상 |
 | B5 | ACM 인증서 + DNS(HostingKR) + ALB listener:443 + HTTP redirect | ✅ | 2026-05-26 완료. `api.naengo.com` HTTPS 동작 + listener:80 → 301 redirect + e2e 33/33 PASS. 자세한 진행: [`changes/2026-05-26-b5-https-api-naengo-com.md`](changes/2026-05-26-b5-https-api-naengo-com.md) |
 | B6 | 보안그룹 (B4-d 와 통합 완료) | ✅ | B4-d 에 흡수 |
-| B7 | RDS 사전 점검 | ✅ | DBv5 적용 상태 / Flyway baseline 자동 init / Hibernate validate 통과 |
-| B8 | 첫 배포 검증 | ✅ | signup 201, JWT 발급, 쿠키 Secure+HttpOnly+SameSite=Lax |
 | B7 | RDS 사전 점검 | ✅ | 옵션 A 채택으로 우리 V1=DBv5. 운영 RDS 가 이미 DBv5 적용 상태라 `baseline-on-migrate=true` 가 자동 baseline INSERT + migrate skip. 부팅 검증됨 |
-| B8 | 첫 배포 검증 (Flyway V1~V5 적용 / `/` 200 / signup 201 / 카카오 흐름 B) | ⏸ | [`deploy-env.md §4, §6`](deploy-env.md) |
+| B8 | 첫 배포 검증 (signup 201 + JWT 발급 + 쿠키 Secure HttpOnly + 운영 e2e 33/33 PASS) | ✅ | 5/21 첫 배포 → 5/22 DB 손상 → 5/23 복구 + 32/33 → 5/26 HTTPS 후 33/33 PASS |
 
 ---
 
@@ -100,13 +97,18 @@
 
 | # | 상대 | 안건 | 상태 |
 |---|---|---|---|
-| C0 | **DB 팀원** | **V4(레시피 정규화) + V5(users 컬럼 제거) 적용 예정 통지 + RDS 사전 점검 협의** | ✅ |
+| C0 | **DB 팀원** | **V4(레시피 정규화) + V5(users 컬럼 제거) 적용 예정 통지 + RDS 사전 점검 협의** | ✅ → 사실상 옵션 A 로 흡수 (DBv5 직접 채택) |
 | C1 | AI 팀 | V5 후 AI 코드가 `users.provider`/`provider_id` 컬럼을 SELECT 한 적 있다면 `user_identities` JOIN 으로 전환 필요 | 🚫 N/A — 옵션 A 채택으로 DBv5 의 users 에 그 컬럼 자체가 없음. AI 가 SELECT 할 가능성 0 |
 | C2 | AI 팀 | 레시피 정규화 합동 컷오버 일정 | ✅ 사실상 완료 — DB 팀원이 DBv5(정규화 완성형) 적용 + AI 003/004/005 적용 + 우리 옵션 A align. 양측 모두 DBv5 위에서 동작 |
 | C3 | AI 팀 | `JWT_SECRET` 운영 값 동일 공유 (D-2). 옵션 (a) 채택: 현 값 그대로 AI 에 전달 → AI 가 본인 Secrets Manager 저장 + 서비스 재시작 | ✅ 2026-05-26 closed — secret 동일 적용 확인. cross-team smoke 통과 |
 | C4 | front/AI | `/me/profile` 변경 의미 합의 (우리 PATCH 교체 vs AI POST/DELETE) | ✅ 2026-05-23 closed — front 가 PATCH 우리 호출 → 5/26 분담 대전환으로 front 가 AI 로 routing 변경 → 최종 정본 = AI 의 POST(append)/DELETE(remove). 우리 PATCH 는 호출자 0 |
 | C5 | AI 팀 | AI 가 우리 JWT 검증 적용 (FastAPI `HTTPBearer` + `HS512` decode), `TEMP_USER_ID` placeholder 제거 | ✅ 2026-05-26 closed — `app/api/v1/deps.py` 갱신 확인. cross-team smoke (우리 signup → user_id=9 JWT → AI `GET /users/me` 200 + user_id=9 회신 + `GET /recipes/scraps` 200) 통과 |
+| C6 | front 팀 | `naengo_api_service.dart` L368 `pending_recipe_id` fallback 제거 (옵션 A 후 dead branch) | ⏸ 운영 1~2주 안정화 + 옛 키 응답 0건 확인 후 협의 |
 | C7 | AI 팀 | AI 의 `/users/me`, `/users/me/profile` 폐기 (5/22 결정 — 당시 우리 정본) | 🔄 5/26 무효화 — front 라우팅 대전환으로 AI 가 정본됨 → 폐기 안 함이 정합. 대신 **우리 측 `UserMeController` getMe/updateMe/getProfile/updateProfile 이 폐기 후보로 전환** (호출자 0). 변경: [`changes/2026-05-26-front-routing-reversal.md`](changes/2026-05-26-front-routing-reversal.md) (예정) |
+| C8 | front + AI | 이미지 업로드 owner 결정 (우리 multipart vs AI multipart vs 클라이언트 → S3 presigned). 현재 양쪽 모두 dead — front 가 image 자체를 안 보냄 (`'image_url': null` 하드코딩) | ⏸ front 의 이미지 화면 구현 직전 결정 |
+| C9 | admin 팀 | `vercel.json` rewrite destination 갱신 — `http://naengo-api-server-alb-...elb.../api/v1/*` → `https://api.naengo.com/api/v1/*` (보안 + 안정성) | ⏸ admin 팀 |
+| C10 | front 팀 | dart-define 운영 빌드값 갱신 — `NAENGO_SPRING_BASE=https://api.naengo.com`, `NAENGO_API_BASE=https://ai.naengo.com` (AI 도메인 부착 후) | ⏸ AI 도메인 부착 후 |
+| C11 | AI 팀 | `ai.naengo.com` 부착 (본인 ACM 발급 + HostingKR DNS 등록 + AI 인프라 attach) | ⏸ AI 팀 자체 진행 |
 
 ---
 
@@ -115,26 +117,38 @@
 | # | 항목 | 상태 | 메모 |
 |---|---|---|---|
 | D1 | `.env` 평문 secret → Secrets Manager 이관 후 로컬 `.env` 에선 dev-only 값 또는 제거 | ✅ | 2026-05-22 로컬 `.env` 운영 secret 4종 제거 (DB host/password, JWT_SECRET, KAKAO key) → 로컬 docker-compose 더미값으로 치환. 운영 실값은 Secrets Manager 만 보유. `.env` 는 `.gitignore` 보호 + git history 노출 0 확인 |
-| D2 | CORS 좁힘 (= A3) | ⏸ | |
-| D3 | CloudWatch alarm 4종 + SNS 이메일 알림 | ✅ | 2026-05-22 완료. 4 alarm (billing $20 / ALB 5xx>5/5m / TG UnHealthyHost / RDS CPU>80%) + SNS 2 topic 모두 Confirmed. 사용자 측 AWS billing preferences "Receive CloudWatch billing alerts" ON 완료 |
-| D4 | IAM 사용자 권한 좁히기 (현재 AdministratorAccess) | ⏸ | 첫 배포 안정화 후 ECR/Secrets/ECS/RDS-describe 만 가진 좁은 policy 로 |
+| D2 | CORS 좁힘 (= A3) | 🟡 보안 위생만 | admin vercel proxy 패턴이라 CORS 영향 0. 위생 차원 admin URL 확정 후 |
+| D3 | CloudWatch alarm 4종 + SNS 이메일 알림 | ✅ | 2026-05-22 완료. 4 alarm + SNS 2 topic 모두 Confirmed. billing preferences ON |
+| D4 | IAM 사용자 권한 좁히기 (현재 AdministratorAccess) | ⏸ | 5/26 기준 5일 안정화. 1~2주 후 ECR/Secrets/ECS/RDS-describe/ELB/ACM/EC2 SG modify 만 가진 policy 로 |
 | D5 | IAM 사용자 MFA 활성화 | ✅ | 2026-05-22 |
+| D6 | (신규) ACM 인증서 만료 30일 전 CloudWatch 알람 | ⏸ 선택 | 자동 갱신 trigger 가 만료 60일 전이지만 실패 케이스 대비 알람 추가 권장 |
 
 ---
 
-## 현재 막힌 지점 / 다음 액션 (우선순위)
+## 현재 상태 / 다음 액션 (2026-05-26 기준)
 
-🎉 **첫 배포 완료 (2026-05-21)** — ALB DNS `http://naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com/` 정상 응답. signup → user_id=4 발급 + 쿠키 정상.
+🎉 **운영 서비스 완성** — `https://api.naengo.com` 동작 (e2e 33/33 PASS) + cross-team JWT smoke 통과. **우리측 단독 task = 0**.
 
-**우리측 단독 작업 (D1/D3/D5) 모두 완료 — 2026-05-22**.
+### 우리측 잔여 task (모두 미시급)
 
-남은 작업 (외부 의존):
-1. **C3** [AI 팀] — 옵션 (a) 채택. 우리 현 `JWT_SECRET` 그대로 AI 에 안전 채널 전달 → AI 측 적용 후 토큰 cross-verify (login 토큰 → AI endpoint 호출)
-2. **C4** [프론트 팀] — `/me/profile` PATCH vs AI POST/DELETE 선택 (우리 측 작업 0)
-3. **B5 / A2 / A3** [도메인 결정] — 운영 도메인 결정 후 ACM + Route53 + listener:443 부착 → 그 시점에 `update-secret` 으로 KAKAO_REDIRECT_URI prod 값 교체 + CORS 좁힘
-4. **D4** [보류 권장] — IAM 사용자 권한 좁히기. 운영 1~2주 안정화 후 (지금 좁히면 트러블슛 막힐 수 있음)
+| 구분 | 항목 | 시점 |
+|---|---|---|
+| 🟡 보안 위생 | A3/D2 CORS 좁히기 | admin URL 확정 후 (vercel proxy 패턴이라 실 영향 0) |
+| 🟢 정리 | 폐기 후보 controller PR (6+개) | 운영 1~2주 안정화 후 단계 PR — 자세히는 [`changes/2026-05-23-cross-team-actual-routing.md`](changes/2026-05-23-cross-team-actual-routing.md) |
+| 🟢 보안 | D4 IAM 권한 좁히기 | 운영 1~2주 안정화 후 |
+| 🟢 선택 | D6 ACM 만료 30일 알람 | 언제든 |
 
-> 운영 도메인이 정해지지 않은 상태에서도 B3/B4 까진 placeholder 로 진행 가능 (KAKAO_REDIRECT_URI 만 임시값). B5(ALB+Route53)는 도메인 필요.
+### 외부 의존 (대기)
+
+| # | 누구 | 항목 |
+|---|---|---|
+| C9 | admin 팀 | `vercel.json` rewrite HTTPS 도메인으로 갱신 |
+| C10 | front 팀 | dart-define 운영 빌드값 도메인 갱신 (AI 부착 후) |
+| C11 | AI 팀 | `ai.naengo.com` 부착 (본인 ACM + DNS) |
+| C6 | front 팀 | `pending_recipe_id` fallback 제거 (운영 1~2주 후) |
+| C8 | front + AI | 이미지 업로드 owner (이미지 화면 구현 직전) |
+
+> 모든 항목 우리 작업 0 또는 미시급. 운영 모니터링 + 알람 감시 단계.
 
 ## 변경 이력
 
