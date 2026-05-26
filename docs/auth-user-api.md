@@ -19,7 +19,7 @@
 
 | 항목 | 값 |
 |---|---|
-| Base URL | `{API_SERVER}` (로컬 `http://localhost:8080`) |
+| Base URL | **운영 `https://api.naengo.com`** / 로컬 `http://localhost:8080` |
 | 공통 prefix | `/api/v1` |
 | 성공 응답 | **raw JSON** (래퍼 없음) |
 | 실패 응답 | `{"error":{"code":"...","message":"...","details":{}}}` |
@@ -344,7 +344,7 @@ AI 분석 7필드 + `ai_analyzed_at` 는 **read-only** (AI 서버가 채움).
 | 로컬 e2e (bootRun + docker-compose Postgres + curl 시퀀스) — **옵션 A 후 재검증** | ✅ 2026-05-22 — `scripts/e2e-smoke-prod.sh` **33/33 PASS** (signup/login/duplicate/validation/Bearer+Cookie 인증/users/me 필드(`username`·`provider`·`is_active`+`deleted_at` 부재 검증)/닉네임 변경+충돌/비번 변경+오답/프로필 GET·PATCH/선호도 GET·PATCH/카카오 invalid token/로그아웃 멱등/탈퇴+같은 토큰·username 차단) |
 | 로컬 e2e (이전, 옵션 A 이전 코드) | ✅ 2026-05-18 — 카카오 가입(브라우저) + 회원가입/로그인/로그아웃/닉네임·비번 변경/프로필/차단/탈퇴(chat soft-delete) **26/26 PASS** (참고용 기록) |
 | 로컬 카카오 브라우저 e2e | ✅ 2026-05-18 ([`kakao-oauth-runbook §3`](kakao-oauth-runbook.md)) |
-| **운영 ALB e2e (옵션 A + DB 복구 후)** | ✅ 2026-05-23 — **32/33 PASS**. 실패 1건은 `#23 cookie-based auth` (`Secure` 쿠키 + HTTP ALB 환경 한계, B5 HTTPS 부착 시 자연 해결, 실서비스 영향 0 — front/admin Bearer 우선). 이전 PENDING (2026-05-22 9/33) 은 운영 RDS schema 손상 사고 — DB 팀원이 DBv5.sql 재적용으로 복구 완료. 자세한 진단: [`changes/2026-05-22-prod-users-table-missing.md`](changes/2026-05-22-prod-users-table-missing.md) |
+| **운영 e2e (옵션 A + DB 복구 + HTTPS)** | ✅ 2026-05-26 — **33/33 PASS** (`https://api.naengo.com`). Bearer + Cookie 둘 다 동작. B5 (HTTPS 부착) 자세한 진행: [`changes/2026-05-26-b5-https-api-naengo-com.md`](changes/2026-05-26-b5-https-api-naengo-com.md). 직전 32/33 (2026-05-23 HTTP) 이력 + DB 복구 사고 진단: [`changes/2026-05-22-prod-users-table-missing.md`](changes/2026-05-22-prod-users-table-missing.md) |
 | 운영 카카오 키 / 흐름 B | ⬜ 도메인 + HTTPS 부착 후 (`KAKAO_REST_API_KEY` 운영값은 Secrets Manager 에 적재 완료. `KAKAO_REDIRECT_URI` 는 도메인 결정 후 update + 카카오 콘솔 등록) |
 | 탈퇴 시 chat 메시지 hard delete/PII 스크럽 | ⬜ AI 서버 합의 후 승격 |
 

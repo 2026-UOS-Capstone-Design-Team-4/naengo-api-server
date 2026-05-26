@@ -32,9 +32,13 @@
 | ECS task SG | `sg-0001862a6ba20c4cf` (`naengo-api-server-ecs-sg`, inbound 8080 from ALB SG) |
 | RDS SG | `sg-0898460971d5b8d04` (inbound 5432 from `ec2-rds-1` + 우리 ECS SG) |
 | ALB ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:loadbalancer/app/naengo-api-server-alb/159ba31da2dc086e` |
-| **ALB DNS** | **`naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com`** (도메인 부착 전 검증용 — `http://<이 호스트>/` 로 접근) |
+| **운영 도메인** | **`https://api.naengo.com`** ✅ (B5 완료 2026-05-26) |
+| ALB DNS (내부 참조용) | `naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com` |
 | Target Group ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:targetgroup/naengo-api-server-tg/1303d640c7a0ed98` (HTTP 8080, target-type ip, health check `/`) |
-| Listener:80 ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:listener/app/naengo-api-server-alb/159ba31da2dc086e/bebdb0686756e3b2` |
+| Listener:80 ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:listener/app/naengo-api-server-alb/159ba31da2dc086e/bebdb0686756e3b2` (HTTP → HTTPS 301 redirect) |
+| Listener:443 ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:listener/app/naengo-api-server-alb/159ba31da2dc086e/4312f361a7170e6c` (HTTPS, TLS 1.2/1.3, forward to TG) |
+| ACM Cert ARN | `arn:aws:acm:ap-northeast-2:518056141724:certificate/b501f6d7-0245-4efb-8298-fa6e134a261f` (api.naengo.com, DNS validation, auto-renew) |
+| DNS provider | HostingKR (공용 계정 — 양 팀 작업 시 충돌 주의) |
 | SNS billing topic | `arn:aws:sns:us-east-1:518056141724:naengo-billing-alerts` (subscription: ppoobb94471@gmail.com, ✅ Confirmed 2026-05-22) |
 | SNS ops topic | `arn:aws:sns:ap-northeast-2:518056141724:naengo-ops-alerts` (subscription: ppoobb94471@gmail.com, ✅ Confirmed 2026-05-22) |
 | CloudWatch alarms (4종) | `naengo-billing-over-20-usd`(us-east-1) / `naengo-alb-target-5xx` / `naengo-tg-unhealthy-host` / `naengo-rds-cpu-high`(ap-northeast-2) |
@@ -83,7 +87,7 @@
 | B4-e | ALB + Target Group + listener:80 | ✅ | ALB DNS / TG / Listener ARN §0. TG targets 비어 있음 (Service 미생성, 정상) |
 | B4-f | ECS Service 생성 (Cluster + TaskDef + TG + SG + subnets) | ✅ | service `naengo-api-server` desired=1, assignPublicIp=ENABLED |
 | B4-g | 실행 확인 (Task running + TG healthy + `/` 200) | ✅ | Task `5da1ffd...` healthy, ALB DNS `/` 200 / `/api/v1/users/me` 401 / `POST /auth/signup` 201 + user_id=4 발급 + Set-Cookie 정상 |
-| B5 | ACM 인증서 + Route53 + ALB listener:443 | ⏸ | 운영 도메인 결정 필요. ALB DNS (`naengo-api-server-alb-176175450...`) 로 80 검증 완료 |
+| B5 | ACM 인증서 + DNS(HostingKR) + ALB listener:443 + HTTP redirect | ✅ | 2026-05-26 완료. `api.naengo.com` HTTPS 동작 + listener:80 → 301 redirect + e2e 33/33 PASS. 자세한 진행: [`changes/2026-05-26-b5-https-api-naengo-com.md`](changes/2026-05-26-b5-https-api-naengo-com.md) |
 | B6 | 보안그룹 (B4-d 와 통합 완료) | ✅ | B4-d 에 흡수 |
 | B7 | RDS 사전 점검 | ✅ | DBv5 적용 상태 / Flyway baseline 자동 init / Hibernate validate 통과 |
 | B8 | 첫 배포 검증 | ✅ | signup 201, JWT 발급, 쿠키 Secure+HttpOnly+SameSite=Lax |
@@ -144,3 +148,4 @@
 - 2026-05-22 **⚠️ 운영 RDS schema 손상 발견**: 운영 ALB e2e 시 `relation "users" does not exist` 500 발화. RDS PG 로그 분석 결과 **04:35 KST 에 DB 작업자 (`172.31.3.36`, master 사용자 `naengo`) 가 큰 schema 변경 SQL 실행 — `pending_recipes` (옛 schema) 참조 statement 가 첫 ERROR → 일부 DROP 만 적용 + CREATE 단계 전 abort 추정**. ECS task 는 부팅 시점 metadata cache 유효해서 hibernate validate 통과 + healthcheck path `/` 가 DB 미접근 → 모니터링 사각. 코드 무결성: 통합 30/30 + 로컬 e2e 33/33 PASS 로 입증. 자세한 진단: [`changes/2026-05-22-prod-users-table-missing.md`](changes/2026-05-22-prod-users-table-missing.md). **다음 액션: DB 팀원과 원인 확인 → schema 복구 → ECS force-new-deployment → 운영 e2e 재실행**.
 - 2026-05-23 **✅ 운영 RDS schema 복구 완료 + 운영 e2e 32/33 PASS**: DB 팀원이 DBv5.sql 재적용. ECS task 는 RUNNING 유지 (재배포 불필요 — DB 만 정상화되면 즉시 동작). 운영 ALB BASE 로 `scripts/e2e-smoke-prod.sh` 재실행 → 32/33 PASS. 실패 1건 (#23 cookie-based auth) 은 `Secure` 쿠키 + HTTP ALB 환경 한계 (B5 HTTPS 부착 시 자연 해결, 실서비스 영향 0 — front/admin Bearer 우선). **옵션 A 코드가 운영에서 완전히 정상 동작 입증.**
 - 2026-05-23 **📋 크로스팀 실 라우팅 분석**: naengo-ai / naengo-admin / naengo-front 최신본 직접 스캔. front 가 이미 `springBase`(우리 ALB) + `baseUrl`(AI 8000) 이중 분리 채택 + 우리 ALB DNS 가 default 값으로 박혀있음. 운영 모델 D+ (front 명시 분담) 확정. C4 closed (front 가 PATCH 채택). C7 결정 (AI 의 `/users/me`, `/users/me/profile` 폐기 — AI 팀 통보 완료). C6/C8 보류 (front fallback / multipart owner 결정). 우리 controller 6개 폐기 후보 식별 (모두 호출자 0, 운영 1주 안정화 후 단계 PR). 자세한 분석: [`changes/2026-05-23-cross-team-actual-routing.md`](changes/2026-05-23-cross-team-actual-routing.md).
+- 2026-05-26 **🔐 B5 완료 — HTTPS 부착**: 도메인 `naengo.com` 결정 (HostingKR 공용 계정). 팀 합의로 서브도메인 분기 (`api.naengo.com` 우리 / `ai.naengo.com` AI). ACM 인증서 발급 (DNS validation, 5분 ISSUED) + HostingKR DNS 등록 (검증 CNAME + api → ALB CNAME) + ALB SG inbound 443 + listener:443 (TLS 1.2/1.3) + listener:80 → 301 redirect. 운영 e2e 33/33 PASS (Secure 쿠키 + HTTPS 환경 동작 입증). 자세한 진행: [`changes/2026-05-26-b5-https-api-naengo-com.md`](changes/2026-05-26-b5-https-api-naengo-com.md). 남은: A3 (CORS 좁히기 — admin URL 결정 후), AI 측 ai.naengo.com 진행 대기, KAKAO_REDIRECT_URI 는 모바일 흐름이라 현 placeholder 유지.
