@@ -220,13 +220,37 @@ JWT 만료 **24시간**, refresh token 없음 → 만료 시 **재로그인**.
 
 ## 8. 회원 탈퇴 — `DELETE /api/v1/users/me`
 
-- 인증: 필요
+- 인증: 필요 (`Authorization: Bearer <access_token>` 또는 쿠키)
+- **owner: 우리 서버 (Spring). AI 서버에는 이 endpoint 없음** — front 탈퇴 화면은 반드시 우리(`$_authBase` = `https://api.naengo.com`) 호출
 - **익명화 방식**: `users` row 보존 + PII nullify(`username`/`password_hash`) + 닉네임 `탈퇴한 사용자_<id>` + `is_active=false`, `is_blocked=true`. (옵션 A 후 `deleted_at` 컬럼 없음 — `is_active=false` 가 탈퇴 표식 단일화)
 - 부속 데이터(좋아요/스크랩/제출레시피/프로필/`user_identities` 소셜 link) 삭제 + 채팅방 soft delete(`is_active=false`). 작성 레시피는 보존(응답 시 닉네임 `탈퇴한 사용자` 치환)
 
+**Request** — body 없음. 인증 헤더만.
+```
+DELETE /api/v1/users/me
+Authorization: Bearer <access_token>
+```
+
 **Response `204`** (+ `Set-Cookie: NAENGO_AT=; Max-Age=0`)
 
-탈퇴 후 같은 토큰 재사용 → 차단되어 **401** 응답.
+탈퇴 후 같은 토큰 재사용 → 차단되어 **401** 응답. 탈퇴 계정 재로그인 → **401** (username null 익명화).
+
+**에러**: `401 UNAUTHENTICATED` (미인증/탈퇴된 토큰), `409 ALREADY_WITHDRAWN` (이미 탈퇴 — 단 탈퇴 토큰은 is_blocked 로 401 먼저 발화)
+
+> **운영 검증** (2026-05-26, `https://api.naengo.com`): 탈퇴 전 `/users/me` 200 → `DELETE` 204 → 같은 토큰 재호출 401 → 재로그인 401 → 재탈퇴 401. 5/5 PASS.
+>
+> **Flutter 호출 예시:**
+> ```dart
+> static Future<void> withdrawAccount() async {
+>   final uri = Uri.parse('$_authBase/api/v1/users/me');   // 우리 서버 (springBase)
+>   final r = await http.delete(uri, headers: _authHeaders());
+>   if (r.statusCode != 204) {
+>     throw HttpException('withdraw ${r.statusCode}: ${r.body}', uri: uri);
+>   }
+>   AuthServiceLocator.instance.clearToken();  // 로컬 토큰 폐기
+> }
+> ```
+> ⚠️ **Play Store Data Safety 정책**: 계정 생성 기능이 있는 앱은 앱 내 계정 삭제 기능 필수. 출시 전 front 탈퇴 화면 필요. 서버는 준비 완료.
 
 > 채팅: 탈퇴 시 본인 `chat_rooms` 는 **soft delete(`is_active=false`)** 처리 → 이후 채팅 목록/조회에서 제외.
 > 메시지 본문 hard delete / PII 스크럽은 AI 서버(메시지 primary writer) 합의 후 승격 예정.
@@ -357,7 +381,7 @@ AI 분석 7필드 + `ai_analyzed_at` 는 **read-only** (AI 서버가 채움).
 | 항목 | 상태 |
 |---|---|
 | 회원가입 / 로그인 / 카카오 / 로그아웃 | ✅ 구현·테스트 |
-| 마이페이지 조회/수정, 비밀번호 변경, 탈퇴(익명화) | ✅ 구현·테스트 |
+| 마이페이지 조회/수정, 비밀번호 변경, 탈퇴(익명화) | ✅ 구현·테스트. **탈퇴 운영 실측 2026-05-26 5/5 PASS** (탈퇴 204 → 토큰 차단 401 → 재로그인 401 → 재탈퇴 401). owner = 우리 (AI 에 없음) |
 | 프로필(user_input) / 선호도(확장) | ✅ 구현·테스트 |
 | 가입·소셜가입 시 `user_profiles` 자동 생성 | ✅ |
 | 전 요청·응답 JSON 키 snake_case 통일 | ✅ 2026-05-17 (전역 Jackson `SNAKE_CASE`) |
