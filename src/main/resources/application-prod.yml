@@ -5,6 +5,18 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  # Hibernate schema 검증 비활성화 (운영 한정).
+  # 이유: DB/AI 팀이 운영 RDS schema 를 직접 SQL 로 진화시킴 (recipe_media 드롭,
+  # user_recipe_* 정규화 등 — 우리 Flyway baseline 이후 drift). 우리 서버는 5/26 라우팅
+  # 대전환 후 auth/JWT 전용이라 recipe 도메인 entity 는 dead (front→AI). validate 는
+  # 서빙하지 않는 dead 테이블 drift 에 false-positive 부팅 실패를 내므로 none 으로 둠.
+  # auth/탈퇴 cleanup 경로(users/user_identities/user_profiles/likes/scraps/user_recipes/
+  # chat_rooms)는 안정 테이블이라 무영향. local/test 는 base application.yml 의 validate 유지.
+  # 정식 정리(dead 도메인 제거)는 별도 PR. (2026-06-07, B6 EC2 마이그레이션 중 발견)
+  jpa:
+    hibernate:
+      ddl-auto: none
+
   # Flyway — 운영 RDS 는 DB 팀원이 DBv5 를 SQL 로 이미 적용한 상태.
   # 첫 부팅 시 baseline-on-migrate=true 가 flyway_schema_history 에
   # baseline row (version=1) 만 INSERT 하고 migrate 는 skip.
