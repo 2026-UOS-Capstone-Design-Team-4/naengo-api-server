@@ -21,24 +21,30 @@
 | RDS DB / user | `naengo_db` / `naengo` |
 | DB 운영 주체 | 팀원 (V5 의 users 컬럼 변경 반영 받음) |
 | SSL 옵션 결정 | A — Dockerfile 에 RDS CA 번들 포함 + `sslmode=verify-full` |
-| ECS Cluster | `arn:aws:ecs:ap-northeast-2:518056141724:cluster/naengo` (name: `naengo`) |
-| ECS Task Definition | `naengo-api-server:2` (옵션 A 후 SHA `8cbea88...` pin. rev 1 은 옵션 A 이전 폐기) |
+| **운영 컴퓨트 (현행)** | **EC2 t4g.small (ARM) — B6 마이그레이션 2026-06-07.** 아래 EC2 블록 참조. ECS/ALB 는 폐기 예정 bridge |
+| ECS Cluster | `arn:aws:ecs:ap-northeast-2:518056141724:cluster/naengo` — 🟡 bridge (C9/C10 후 폐기) |
+| ECS Task Definition | `naengo-api-server:2` (amd64, 옵션 A SHA `8cbea88...`) — 🟡 bridge |
 | ECS Task Execution Role | `arn:aws:iam::518056141724:role/ecsTaskExecutionRole` (managed `AmazonECSTaskExecutionRolePolicy` + inline `naengo-secrets-fetch`) |
-| ECS Service 이름 | `naengo-api-server` (desired=1, assignPublicIp=ENABLED) |
-| CloudWatch Log Group | `/ecs/naengo-api-server` (30일 보존) |
+| ECS Service 이름 | `naengo-api-server` (desired=1) — 🟡 bridge |
+| CloudWatch Log Group | `/ecs/naengo-api-server` (Fargate, bridge) + **`/ec2/naengo-api-server` (EC2 현행)** |
+| **EC2 인스턴스** | **`i-00768e6ef42e4e04b`** (`naengo-api-server`, t4g.small ARM, AL2023) |
+| **EC2 Elastic IP** | **`13.209.115.84`** (`eipalloc-08a1416df875990b1`) |
+| EC2 SG | `sg-000355d7ad6c12936` (`naengo-api-server-ec2-sg`, inbound 80+443 from 0.0.0.0/0. SSH 없음 — SSM 접속) |
+| EC2 instance profile | `naengo-api-server-ec2-profile` (role `naengo-api-server-ec2-role`: ECR read + Secrets get + SSM + CloudWatch) |
+| EC2 부트스트랩 | `deploy/ec2-userdata.sh` (Docker + Caddy + ECR pull + Secrets→app.env) |
+| TLS (EC2) | **Caddy 2 + Let's Encrypt** (자동 발급/90일 갱신). HTTP→HTTPS 자동 redirect |
+| EC2 접속 | SSM Session Manager (`aws ssm start-session --target i-00768e6ef42e4e04b`) — SSH 키 없음 |
 | Default VPC | `vpc-038c8eb56e23d5bb5` (172.31.0.0/16) — RDS 와 동일 VPC |
 | Public subnets (4 AZ) | `subnet-0609c0a1180692f1d` (a) / `subnet-0417a2a8b7cb1c616` (b) / `subnet-0752c9e933903abf3` (c) / `subnet-057d3291db1e11d00` (d) |
 | ALB SG | `sg-0f143ba6a8d9997d2` (`naengo-api-server-alb-sg`, inbound 80 + 443 from 0.0.0.0/0) |
 | ECS task SG | `sg-0001862a6ba20c4cf` (`naengo-api-server-ecs-sg`, inbound 8080 from ALB SG) |
 | RDS SG | `sg-0898460971d5b8d04` (inbound 5432 from `ec2-rds-1` + 우리 ECS SG) |
 | ALB ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:loadbalancer/app/naengo-api-server-alb/159ba31da2dc086e` |
-| **운영 도메인** | **`https://api.naengo.com`** ✅ (B5 완료 2026-05-26) |
-| ALB DNS (내부 참조용) | `naengo-api-server-alb-176175450.ap-northeast-2.elb.amazonaws.com` |
-| Target Group ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:targetgroup/naengo-api-server-tg/1303d640c7a0ed98` (HTTP 8080, target-type ip, health check `/`) |
-| Listener:80 ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:listener/app/naengo-api-server-alb/159ba31da2dc086e/bebdb0686756e3b2` (HTTP → HTTPS 301 redirect) |
-| Listener:443 ARN | `arn:aws:elasticloadbalancing:ap-northeast-2:518056141724:listener/app/naengo-api-server-alb/159ba31da2dc086e/4312f361a7170e6c` (HTTPS, TLS 1.2/1.3, forward to TG) |
-| ACM Cert ARN | `arn:aws:acm:ap-northeast-2:518056141724:certificate/b501f6d7-0245-4efb-8298-fa6e134a261f` (api.naengo.com, DNS validation, auto-renew) |
-| DNS provider | HostingKR (공용 계정 — 양 팀 작업 시 충돌 주의) |
+| **운영 도메인** | **`https://api.naengo.com`** ✅ → **EC2(`13.209.115.84`) 직결** (A 레코드). B6 후 ALB 안 거침 |
+| ALB ARN / DNS | `...:loadbalancer/app/naengo-api-server-alb/159ba31da2dc086e` / `naengo-api-server-alb-176175450...elb.amazonaws.com` — 🟡 bridge (C9/C10 후 폐기) |
+| Target Group / Listener 80·443 | TG `...targetgroup/naengo-api-server-tg/1303d640c7a0ed98`, L80 `.../bebdb0686756e3b2`(301 redirect), L443 `.../4312f361a7170e6c` — 🟡 bridge |
+| ACM Cert (ALB용) | `arn:aws:acm:ap-northeast-2:518056141724:certificate/b501f6d7-...` — 🟡 bridge. ALB 폐기 시 함께 정리 (EC2 는 Let's Encrypt 사용) |
+| DNS provider | HostingKR (공용 계정). ⚠️ **ns2/ns4 에 `api A 43.201.141.93` 좀비 잔존** (자체 sync 버그, 죽은 IP. public resolver 영향 0. HostingKR 고객센터 정리 필요 — cert 갱신 안정성) |
 | SNS billing topic | `arn:aws:sns:us-east-1:518056141724:naengo-billing-alerts` (subscription: ppoobb94471@gmail.com, ✅ Confirmed 2026-05-22) |
 | SNS ops topic | `arn:aws:sns:ap-northeast-2:518056141724:naengo-ops-alerts` (subscription: ppoobb94471@gmail.com, ✅ Confirmed 2026-05-22) |
 | CloudWatch alarms (4종) | `naengo-billing-over-20-usd`(us-east-1) / `naengo-alb-target-5xx` / `naengo-tg-unhealthy-host` / `naengo-rds-cpu-high`(ap-northeast-2) |
@@ -93,6 +99,27 @@
 
 ---
 
+## B-EC2. EC2 마이그레이션 (비용 절감 · 2026-06-07)
+
+> 동기: 팀원 요청 — ALB(~$22/월) + Fargate(~$20/월) 고정비 과다. EC2 단일 인스턴스로 전환.
+> 결정: t4g.small (ARM, 2GB — AI 서버와 동일) + Caddy(Let's Encrypt). 절감 ~$25/월.
+
+| # | 항목 | 상태 | 메모 |
+|---|---|---|---|
+| E1 | CI arm64 빌드 (`platforms: linux/arm64` + QEMU) | ✅ | t4g 는 ARM. base 이미지 eclipse-temurin 이 arm64 지원 |
+| E2 | EC2 SG + instance role/profile + EIP + RDS SG inbound | ✅ | SG `sg-000355d7ad6c12936`, EIP `13.209.115.84`, profile `naengo-api-server-ec2-profile` |
+| E3 | t4g.small launch + user-data 부트스트랩 | ✅ | `i-00768e6ef42e4e04b`. Docker + Caddy + app 자동 기동 |
+| E4 | DB schema drift 대응 (`ddl-auto: none` prod) | ✅ | recipe_media 드롭 등 drift → validate 실패 → prod none 으로. 부수: Fargate 재시작 위험도 해소 |
+| E5 | EC2 app 부팅 + 내부 auth e2e | ✅ | Started 13s, 내부 signup/me/login/withdraw OK |
+| E6 | DNS 컷오버 (`api` CNAME→A `13.209.115.84`) | ✅ | 사용자 HostingKR. ns2/ns4 좀비 `43.201.141.93` 잔존(무해, §0 참조) |
+| E7 | Caddy Let's Encrypt cert 발급 | ✅ | production cert. EC2 강제 e2e 8/8 (cert=Let's Encrypt) |
+| E8 | CI → EC2 SSM 자동 배포 단계 | ✅ | `ssm:SendCommand` (tag scope) + workflow Deploy step. docker pull + 재시작 + healthcheck |
+| E9 | **ALB/Fargate/ACM(ALB) 폐기** | ⏸ | **C9(admin vercel.json)+C10(front dart-define) 선행** — ALB DNS 직접참조 0 되면 폐기 → 비용절감 완성 |
+| E10 | 좀비 DNS 정리 (HostingKR ns2/ns4) | ⏸ | 고객센터 티켓 — cert 90일 갱신 안정성 위해 권장 |
+| E11 | EC2 모니터링 알람 (CPU/status-check) — 기존 ALB 알람 대체 | ⏸ | ALB 폐기 시 `naengo-alb-target-5xx`/`tg-unhealthy-host` 무효화 → EC2 알람 신설 |
+
+---
+
 ## C. 크로스팀 합의 (본인이 메신저)
 
 | # | 상대 | 안건 | 상태 |
@@ -107,8 +134,10 @@
 | C7 | AI 팀 | AI 의 `/users/me`, `/users/me/profile` 폐기 (5/22 결정 — 당시 우리 정본) | 🔄 5/26 무효화 — front 라우팅 대전환으로 AI 가 정본됨 → 폐기 안 함이 정합. 대신 **우리 측 `UserMeController` getMe/updateMe/getProfile/updateProfile 이 폐기 후보로 전환** (호출자 0). 변경: [`changes/2026-05-26-front-routing-reversal.md`](changes/2026-05-26-front-routing-reversal.md) (예정) |
 | C8 | front + AI | 이미지 업로드 owner 결정 (우리 multipart vs AI multipart vs 클라이언트 → S3 presigned). 현재 양쪽 모두 dead — front 가 image 자체를 안 보냄 (`'image_url': null` 하드코딩) | ⏸ front 의 이미지 화면 구현 직전 결정 |
 | C9 | admin 팀 | `vercel.json` rewrite destination 갱신 — `http://naengo-api-server-alb-...elb.../api/v1/*` → `https://api.naengo.com/api/v1/*` (보안 + 안정성) | ⏸ admin 팀 |
-| C10 | front 팀 | dart-define 운영 빌드값 갱신 — `NAENGO_SPRING_BASE=https://api.naengo.com`, `NAENGO_API_BASE=https://ai.naengo.com` (AI 도메인 부착 후) | ⏸ AI 도메인 부착 후 |
+| C10 | front 팀 | dart-define 운영 빌드값 갱신 — `NAENGO_SPRING_BASE=https://api.naengo.com`, `NAENGO_API_BASE=https://ai.naengo.com` (AI 도메인 부착 후) | ⏸ AI 도메인 부착 후. **EC2 폐기(E9) 선행조건** — ALB DNS 직접참조 제거 |
 | C11 | AI 팀 | `ai.naengo.com` 부착 (본인 ACM 발급 + HostingKR DNS 등록 + AI 인프라 attach) | ⏸ AI 팀 자체 진행 |
+
+> **C9 + C10 = EC2 비용절감(E9 ALB 폐기)의 관문.** 둘 다 `api.naengo.com` 도메인 사용으로 바뀌면 ALB DNS 직접참조 0 → ALB+Fargate 폐기 가능 → 월 ~$42 절감.
 
 ---
 
@@ -125,30 +154,32 @@
 
 ---
 
-## 현재 상태 / 다음 액션 (2026-05-26 기준)
+## 현재 상태 / 다음 액션 (2026-06-07 기준)
 
-🎉 **운영 서비스 완성** — `https://api.naengo.com` 동작 (e2e 33/33 PASS) + cross-team JWT smoke 통과. **우리측 단독 task = 0**.
+🎉 **운영 서비스 = EC2(t4g.small) 로 마이그레이션 완료** — `https://api.naengo.com` → EC2 Caddy(Let's Encrypt) → app, e2e 검증 통과. ALB+Fargate 는 bridge 로 잔존 (C9/C10 후 폐기 → 비용절감 완성).
 
-### 우리측 잔여 task (모두 미시급)
+### 우리측 잔여 task
 
 | 구분 | 항목 | 시점 |
 |---|---|---|
-| 🟡 보안 위생 | A3/D2 CORS 좁히기 | admin URL 확정 후 (vercel proxy 패턴이라 실 영향 0) |
-| 🟢 정리 | 폐기 후보 controller PR (6+개) | 운영 1~2주 안정화 후 단계 PR — 자세히는 [`changes/2026-05-23-cross-team-actual-routing.md`](changes/2026-05-23-cross-team-actual-routing.md) |
-| 🟢 보안 | D4 IAM 권한 좁히기 | 운영 1~2주 안정화 후 |
-| 🟢 선택 | D6 ACM 만료 30일 알람 | 언제든 |
+| 🟡 비용 | **E9 ALB+Fargate 폐기** | C9+C10 충족 후 (관문) — 월 ~$42 절감 |
+| 🟡 운영 | E11 EC2 모니터링 알람 (CPU/status-check) | ALB 폐기와 함께 (기존 ALB 알람 대체) |
+| 🟢 정리 | 폐기 후보 controller PR (6+개) | 운영 안정화 후 — [`changes/2026-05-23-cross-team-actual-routing.md`](changes/2026-05-23-cross-team-actual-routing.md) |
+| 🟢 보안 | D4 IAM 권한 좁히기 | 운영 안정화 후 |
+| 🟢 선택 | D6 ACM(ALB) 만료 알람 — ALB 폐기 시 무의미해짐 | ALB 폐기 전까지만 |
 
 ### 외부 의존 (대기)
 
 | # | 누구 | 항목 |
 |---|---|---|
-| C9 | admin 팀 | `vercel.json` rewrite HTTPS 도메인으로 갱신 |
-| C10 | front 팀 | dart-define 운영 빌드값 도메인 갱신 (AI 부착 후) |
+| **C9** | admin 팀 | `vercel.json` rewrite → `https://api.naengo.com` (**E9 폐기 관문**) |
+| **C10** | front 팀 | dart-define `NAENGO_SPRING_BASE=https://api.naengo.com` (**E9 폐기 관문**) |
+| E10 | 사용자 | HostingKR 고객센터 — ns2/ns4 좀비 `api A 43.201.141.93` 정리 (cert 갱신 안정성) |
 | C11 | AI 팀 | `ai.naengo.com` 부착 (본인 ACM + DNS) |
 | C6 | front 팀 | `pending_recipe_id` fallback 제거 (운영 1~2주 후) |
 | C8 | front + AI | 이미지 업로드 owner (이미지 화면 구현 직전) |
 
-> 모든 항목 우리 작업 0 또는 미시급. 운영 모니터링 + 알람 감시 단계.
+> EC2 전환은 기능 완료. 비용절감(ALB 폐기)만 C9/C10 대기. 그 외 미시급.
 
 ## 변경 이력
 
@@ -169,3 +200,4 @@
 - 2026-05-26 **📋 front 라우팅 대전환 감지**: front `naengo_api_service.dart` 갱신본에서 우리 호출 10개 → **2개로 축소** (`POST /auth/social/kakao`, `POST /auth/logout` 만). `/users/me`, `/users/me/profile`, `/user-recipes*`, `/users/me/scraps` 모두 AI 로 이전. admin 은 vercel proxy 통해 `/auth/login`, `/auth/signup` (LOCAL 가입/로그인) 우리 호출. **최종 우리 활성 endpoint = 4개 (전부 auth 도메인)**. 우리 서버 = JWT 발급 전용 서비스로 축소. C7 결정 무효화 (정반대). 자세한 분석: [`changes/2026-05-23-cross-team-actual-routing.md`](changes/2026-05-23-cross-team-actual-routing.md). DBv5 마이그레이션 2건 (`recipe_labels` CHECK + `user_recipe_reports` 신규 테이블) 발견 — 우리 entity 영향 0.
 - 2026-05-26 **🟢 운영 카카오 흐름 B 실 모바일 e2e 통과**: front 빌드 (패키지명 `com.naengo.app`, 카카오 콘솔 네이티브 키 + 키 해시 등록) 에서 카카오 SDK → 우리 운영 `POST /auth/social/kakao` → JWT 발급 정상. 초기 실패는 front 기존 작업물과 충돌 — front 측 해결. 출시 가능 상태.
 - 2026-05-26 **🟢 회원 탈퇴 운영 실측 5/5 PASS**: `DELETE /api/v1/users/me` (owner = 우리, AI 에 없음). 탈퇴 204 → 같은 토큰 재호출 401 → 재로그인 401 → 재탈퇴 401. 익명화 (PII nullify + is_active=false + is_blocked=true) + 부속 데이터 삭제 + chat soft-delete 검증. **front 탈퇴 화면만 추가하면 출시 가능** (Play Store Data Safety 정책상 필수 — 서버는 준비 완료).
+- 2026-06-07 **🖥️ B6 EC2 마이그레이션 (비용절감)**: 팀원 요청 — ALB+Fargate 고정비(~$42/월) 절감 위해 EC2 t4g.small(ARM, AI 서버와 동일) 전환. ① CI arm64 빌드(QEMU + `platforms: linux/arm64`) ② EC2 SG/instance-role/EIP(`13.209.115.84`)/RDS SG ③ t4g.small(`i-00768e6ef42e4e04b`) + user-data(`deploy/ec2-userdata.sh`: Docker+Caddy+ECR+Secrets) ④ **DB schema drift 발견** (recipe_media 드롭 등 — 우리 코드와 불일치, validate 실패) → `prod ddl-auto: none` (부수: Fargate 재시작 위험도 해소) ⑤ DNS 컷오버(`api` A→EIP) — HostingKR ns2/ns4 좀비 `43.201.141.93` 잔존(죽은 IP, 무해) ⑥ Caddy Let's Encrypt production cert 발급 (rate-limit/staging 우회: caddy_data 볼륨 리셋) ⑦ EC2 강제 e2e 8/8 PASS (cert=Let's Encrypt) ⑧ CI→EC2 SSM 자동배포 단계 추가 (`ssm:SendCommand` tag-scope). **EC2 전환 기능 완료. ALB/Fargate 폐기(E9)는 C9(admin vercel.json)+C10(front dart-define) 도메인 전환 후 → 비용절감 완성.** 자세히: §B-EC2.

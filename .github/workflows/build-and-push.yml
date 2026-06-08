@@ -88,3 +88,37 @@ jobs:
       - name: Output image URI
         run: |
           echo "::notice title=Image pushed::${{ steps.ecr-login.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}"
+
+      # EC2(t4g.small) 배포 — SSM 으로 docker pull + app 재시작. SSH 키 불요.
+      # 대상은 tag Name=naengo-api-server 인스턴스. user-data 와 동일한 run 옵션 사용.
+      - name: Deploy to EC2 via SSM
+        run: |
+          set -euo pipefail
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --region "${{ secrets.AWS_REGION }}" \
+            --filters "Name=tag:Name,Values=naengo-api-server" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' --output text)
+          echo "Deploy target: $INSTANCE_ID"
+          REG="${{ steps.ecr-login.outputs.registry }}"
+          IMG="$REG/${{ secrets.ECR_REPOSITORY }}:latest"
+          CMD_ID=$(aws ssm send-command \
+            --region "${{ secrets.AWS_REGION }}" \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "deploy ${{ github.sha }}" \
+            --parameters commands="[\"aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin $REG\",\"docker pull $IMG\",\"docker rm -f naengo-app 2>/dev/null || true\",\"docker run -d --name naengo-app --restart unless-stopped --network naengo --env-file /opt/naengo/app.env --log-driver awslogs --log-opt awslogs-region=${{ secrets.AWS_REGION }} --log-opt awslogs-group=/ec2/naengo-api-server --log-opt awslogs-create-group=true $IMG\",\"sleep 30\",\"docker run --rm --network naengo curlimages/curl:latest -sf -o /dev/null -w 'deploy healthcheck app:8080 -> %{http_code}\\n' http://naengo-app:8080/\"]" \
+            --query 'Command.CommandId' --output text)
+          echo "SSM CommandId: $CMD_ID"
+          # 완료 대기
+          for i in $(seq 1 30); do
+            ST=$(aws ssm get-command-invocation --region "${{ secrets.AWS_REGION }}" --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'Status' --output text 2>/dev/null || echo Pending)
+            echo "  [$i] $ST"
+            case "$ST" in
+              Success) echo "deploy OK"; break ;;
+              Failed|Cancelled|TimedOut)
+                aws ssm get-command-invocation --region "${{ secrets.AWS_REGION }}" --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'StandardErrorContent' --output text
+                echo "deploy FAILED"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          aws ssm get-command-invocation --region "${{ secrets.AWS_REGION }}" --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query 'StandardOutputContent' --output text | tail -5
