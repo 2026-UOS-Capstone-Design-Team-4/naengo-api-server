@@ -8,15 +8,17 @@
 
 ---
 
-## 🏁 프로젝트 종료 — 전 자원 teardown 완료 (2026-06-08)
+## ♻️ 복구 완료 — 운영 재가동 (2026-06-17)
 
-> **본 문서의 아래 인벤토리/단계는 모두 역사적 기록임.** 프로젝트 종료로 api-server 측 AWS 자원을 전부 제거함 (우리측 월 비용 ~$19 → $0). 팀원 자원(naengo-ai EC2 / RDS `naengo-db-001` / AI secrets)은 일절 미변경.
+> **6/8 teardown → 6/17 복구.** Play Store 출시 지연으로 백엔드 재가동 필요 → B6(EC2) 재배포. RDS 데이터·코드·secret 값·user-data 스크립트 전부 살아있어 무손실 복구. e2e 33/33 PASS.
 >
-> **삭제 완료**: EC2 `i-00768e6ef42e4e04b` terminate + EIP `13.209.115.84` release / ECR `naengo-api-server` / Secrets `naengo/prod/{db,jwt,kakao}` / CloudWatch 알람 4종 + Log Group 2종 + SNS 2종 / ECS taskdef·cluster `naengo` / EC2 SG + RDS inbound 규칙 / IAM role 3종(`naengo-api-server-ec2-role`·`github-actions-ecr-push`·`ecsTaskExecutionRole`) + instance profile.
+> **재생성 (새 ID)**: EC2 **`i-0ce04e443daed6a5e`** (t4g.small ARM) / EIP **`13.209.131.248`** (`eipalloc-0fbb6051677f4118e`) / EC2 SG = **ALB SG `sg-0f143ba6a8d9997d2` 재활용** (80/443) / ECR `naengo-api-server` (CI 재빌드 arm64) / Secrets `naengo/prod/{db-6p3ilw,jwt-ZNvEnb,kakao-KfSZzH}` (값 동일, JWT_SECRET AI 공유분 유지) / IAM role 3종 (`naengo-api-server-ec2-role`+profile, `github-actions-ecr-push` — 동일 ARN) / GitHub secrets 3종 / CloudWatch 알람 4종 + SNS 2종 (이메일 재확인 대기) / RDS inbound (from ALB SG).
 >
-> **의도적 잔존 ($0, 무해)**: ① ALB SG `naengo-api-server-alb-sg` (AI 팀 SG `naengo-ai-server-sg` 가 8000 inbound 소스로 참조 중 — AI 팀이 stale 규칙 제거하면 삭제 가능) ② OIDC provider `token.actions.githubusercontent.com` (계정당 1개 공유 — 타팀 CI 보호).
+> **DNS**: HostingKR `api` A → **`13.209.131.248`** (사용자 재추가 완료). TLS = Caddy + Let's Encrypt (자동).
 >
-> **외부 잔여 (사용자)**: HostingKR `api` A 레코드 + 고아 `_fa840…api` CNAME 삭제 / GitHub repo Secrets(`AWS_ROLE_TO_ASSUME` 등) 죽은 참조 정리 / 카카오 콘솔 앱(선택).
+> **유지**: RDS `naengo-db-001`(데이터 무손실) / OIDC provider / `ecsTaskExecutionRole` 은 미재생성(EC2 라 불요).
+>
+> ⚠️ **아래 §0 인벤토리의 옛 ID** (`i-00768…`, `13.209.115.84`, secret ARN 등) 는 6/8 이전 값 — 위 새 ID 가 현행.
 
 ---
 
@@ -205,3 +207,4 @@
 - 2026-06-07 **🖥️ B6 EC2 마이그레이션 (비용절감)**: 팀원 요청 — ALB+Fargate 고정비(~$42/월) 절감 위해 EC2 t4g.small(ARM, AI 서버와 동일) 전환. ① CI arm64 빌드(QEMU + `platforms: linux/arm64`) ② EC2 SG/instance-role/EIP(`13.209.115.84`)/RDS SG ③ t4g.small(`i-00768e6ef42e4e04b`) + user-data(`deploy/ec2-userdata.sh`: Docker+Caddy+ECR+Secrets) ④ **DB schema drift 발견** (recipe_media 드롭 등 — 우리 코드와 불일치, validate 실패) → `prod ddl-auto: none` (부수: Fargate 재시작 위험도 해소) ⑤ DNS 컷오버(`api` A→EIP) — HostingKR ns2/ns4 좀비 `43.201.141.93` 잔존(죽은 IP, 무해) ⑥ Caddy Let's Encrypt production cert 발급 (rate-limit/staging 우회: caddy_data 볼륨 리셋) ⑦ EC2 강제 e2e 8/8 PASS (cert=Let's Encrypt) ⑧ CI→EC2 SSM 자동배포 단계 추가 (`ssm:SendCommand` tag-scope). **EC2 전환 기능 완료. ALB/Fargate 폐기(E9)는 C9(admin vercel.json)+C10(front dart-define) 도메인 전환 후 → 비용절감 완성.** 자세히: §B-EC2.
 - 2026-06-08 **🗑️ E9 ALB+Fargate 폐기 → 비용절감 실현**: C9(admin vercel.json)+C10(front dart-define) 둘 다 `api.naengo.com`/`ai.naengo.com` 도메인 사용 확인(ALB DNS 직접참조 0) → 폐기 진행. ECS service 삭제(desired=0→delete) + ALB/listener80·443/TG 삭제 + ACM(b501f6d7) 삭제 + ALB EIP 자동회수(고아 0) + SG 정리(RDS inbound 의 ECS SG 규칙만 제거(EC2 SG 유지) → ECS SG 삭제 → ALB SG 삭제). ALB 알람 2종 삭제 + EC2 알람 2종 신설(`naengo-ec2-cpu-high`/`naengo-ec2-status-check-failed`). 폐기 후 EC2 검증: `/` 200 + signup 201. **월 ~$42 → ~$17 절감.** 보너스 발견: front 가 탈퇴 화면(`withdrawAccount`→우리 `DELETE /users/me`) 추가. 후속: HostingKR 좀비/고아 CNAME 정리(E10), AI `ai.naengo.com` 실부착 확인(C11).
 - 2026-06-08 **🏁 프로젝트 종료 — 전 자원 teardown**: api-server 측 AWS 자원 일괄 제거 (EC2 terminate + EIP release + ECR + Secrets 3종 + 알람 4 + Log 2 + SNS 2 + ECS taskdef/cluster + EC2 SG + RDS inbound 규칙 + IAM role 3종/profile). 우리측 월 ~$19 → $0. 팀원 자원(naengo-ai/RDS/AI secrets) 미변경. 의도적 잔존: ALB SG(AI SG 참조로 보류, $0) + OIDC provider(공유, 타팀 CI 보호). 외부 잔여(사용자): HostingKR `api`/`_fa840` DNS, GitHub repo Secrets, 카카오 앱. 상세는 상단 🏁 배너.
+- 2026-06-17 **♻️ 복구 — 운영 재가동**: Play Store 출시 지연으로 6/8 teardown 한 백엔드 재배포. IAM(ec2-role+profile, github-actions-ecr-push 동일 ARN) + ECR + GitHub secrets + Secrets Manager 3종(값 동일, JWT_SECRET AI 공유분 유지) + RDS inbound + 새 EIP `13.209.131.248` + EC2 `i-0ce04e443daed6a5e`(t4g.small, ALB SG `sg-0f143ba6a8d9997d2` 재활용, user-data 부트스트랩) + CloudWatch 알람 4종 + SNS 2종(이메일 재확인 대기). 사용자가 HostingKR `api` A → 새 EIP 재추가. Caddy Let's Encrypt cert 발급, **e2e 33/33 PASS**. RDS 데이터 무손실. 상단 ♻️ 배너가 현행.
