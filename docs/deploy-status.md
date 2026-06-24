@@ -8,7 +8,23 @@
 
 ---
 
-## ♻️ 복구 완료 — 운영 재가동 (2026-06-17)
+## 🏁 재-teardown 완료 — 운영 종료 (2026-06-24)
+
+> **프로젝트 종결 → 6/17 복구분 전부 재해제.** 우리측(박진우 = 서버/인프라) AWS 자원 일괄 삭제. 월 비용 → **$0**. 팀원(최유성 = AI)·공유 자원 무손상.
+>
+> **삭제됨**: EC2 `i-0ce04e443daed6a5e` + EIP `13.209.131.248`(`eipalloc-0fbb6051677f4118e`) — *teardown 착수 시점에 이미 제거돼 있었음 (no-op 확인)* / ECR `naengo-api-server`(이미지 6, force) / Secrets `naengo/prod/{db,jwt,kakao}`(force-delete-without-recovery, 복구불가 — 값은 RDS·AI 복사본·카카오 콘솔에 존재) / CloudWatch 알람 4종(`naengo-ec2-cpu-high`·`naengo-ec2-status-check-failed`·`naengo-rds-cpu-high` ap-ne-2 + `naengo-billing-over-20-usd` us-east-1) / SNS 2종(`naengo-ops-alerts` ap-ne-2 + `naengo-billing-alerts` us-east-1) / Log group `/ec2/naengo-api-server` / IAM role 2종(`naengo-api-server-ec2-role`+profile, `github-actions-ecr-push`) + 정책 / RDS SG `sg-0898460971d5b8d04` inbound 에서 **우리 규칙만**(5432 from `sg-0f143ba6a8d9997d2`, `sgr-0f7bebc1483d80367`) 제거.
+>
+> **유지(건들지 않음)**: RDS `naengo-db-001`(팀원 소유, 데이터 무손실) / SG `sg-0f143ba6a8d9997d2`(`naengo-api-server-alb-sg` — AI SG `sg-0eeabf5dac1ed9774` 가 참조 → 삭제 불가, 빈 SG $0) / OIDC provider(공유, 타팀 CI) / `ecsTaskExecutionRole`(무해 잔존) / AI 자원 전부(`naengo-ai-server-sg`, `/ecs/naengo-ai-server`) / RDS inbound 타팀 규칙 2개(`sg-0d1c7c8530ae7d2dd`, `sg-0eeabf5dac1ed9774`).
+>
+> **검증**: ECR/Secrets/알람/SNS/IAM/Log 전수 재조회 → 전멸 확인. 고아 자원 0(미연결 EBS·ENI·우리 AMI·스냅샷 없음). RDS SG inbound = 타팀 2개만 잔존.
+>
+> **외부 잔여(사용자)**: ~~GitHub repo Secrets 3종~~ ✅ 2026-06-24 삭제(gh) / ~~HostingKR `api` A 레코드~~ ✅ 2026-06-24 사용자 제거 / ~~고아 `_fa840…api` ACM CNAME~~ ✅ 이미 제거됨. **정리 잔여 없음** (카카오 앱은 휴면, 정리 불요).
+>
+> ⚠️ 아래 §0 인벤토리 및 ♻️ 배너의 ID 는 전부 과거 값. **본 배너가 현행 = 우리측 자원 없음.**
+
+---
+
+## ♻️ 복구 — 운영 재가동 (2026-06-17) — ⛔ 2026-06-24 🏁 재teardown 으로 종료됨 (최상단 배너 현행)
 
 > **6/8 teardown → 6/17 복구.** Play Store 출시 지연으로 백엔드 재가동 필요 → B6(EC2) 재배포. RDS 데이터·코드·secret 값·user-data 스크립트 전부 살아있어 무손실 복구. e2e 33/33 PASS.
 >
@@ -18,7 +34,7 @@
 >
 > **유지**: RDS `naengo-db-001`(데이터 무손실) / OIDC provider / `ecsTaskExecutionRole` 은 미재생성(EC2 라 불요).
 >
-> ⚠️ **아래 §0 인벤토리의 옛 ID** (`i-00768…`, `13.209.115.84`, secret ARN 등) 는 6/8 이전 값 — 위 새 ID 가 현행.
+> ⚠️ **아래 §0 인벤토리의 옛 ID** (`i-00768…`, `13.209.115.84`, secret ARN 등) 는 6/8 이전 값. 6/17 복구 새 ID 들도 2026-06-24 🏁 teardown 으로 전부 삭제됨 — **최상단 🏁 배너가 현행.**
 
 ---
 
@@ -35,11 +51,11 @@
 | RDS DB / user | `naengo_db` / `naengo` |
 | DB 운영 주체 | 팀원 (V5 의 users 컬럼 변경 반영 받음) |
 | SSL 옵션 결정 | A — Dockerfile 에 RDS CA 번들 포함 + `sslmode=verify-full` |
-| **운영 컴퓨트 (현행)** | **EC2 t4g.small (ARM) 단독 — B6 마이그레이션 완료 2026-06-08.** ALB+Fargate 폐기 완료(E9). 아래 EC2 블록 참조 |
+| **운영 컴퓨트 (6/8 시점)** | **EC2 t4g.small (ARM) 단독 — B6 마이그레이션 완료 2026-06-08.** ALB+Fargate 폐기 완료(E9). 아래 EC2 블록 참조 |
 | ECS Cluster | `arn:aws:ecs:...:cluster/naengo` — 클러스터 자체는 잔존(빈 클러스터, $0). Service 는 삭제됨 |
 | ~~ECS Task Definition / Service~~ | 🗑️ 삭제됨 (E9 2026-06-08). Task Def rev 2 는 등록만 남음(미사용) |
 | ECS Task Execution Role | `arn:aws:iam::518056141724:role/ecsTaskExecutionRole` — 미사용(잔존, 무해) |
-| CloudWatch Log Group | **`/ec2/naengo-api-server` (EC2 현행)**. `/ecs/naengo-api-server` 는 과거 Fargate 로그(잔존) |
+| CloudWatch Log Group | `/ec2/naengo-api-server` (EC2 시절 — 🗑️ 2026-06-24 삭제). `/ecs/naengo-api-server` 는 과거 Fargate 로그 |
 | **EC2 인스턴스** | **`i-00768e6ef42e4e04b`** (`naengo-api-server`, t4g.small ARM, AL2023) |
 | **EC2 Elastic IP** | **`13.209.115.84`** (`eipalloc-08a1416df875990b1`) |
 | EC2 SG | `sg-000355d7ad6c12936` (`naengo-api-server-ec2-sg`, inbound 80+443 from 0.0.0.0/0. SSH 없음 — SSM 접속) |
@@ -163,7 +179,7 @@
 
 ---
 
-## 현재 상태 / 다음 액션 (2026-06-08 기준)
+## 현재 상태 / 다음 액션 (2026-06-08 기준 — ⛔ 6/17 복구 후 2026-06-24 🏁 종료. 아래는 6/8 시점 기록, 최상단 배너가 현행)
 
 🎉🎉 **EC2 마이그레이션 + 비용절감 완료** — `https://api.naengo.com` → EC2(t4g.small) Caddy(Let's Encrypt) → app. **ALB+Fargate 폐기 완료 → 월 ~$42 → ~$17 (약 60% 절감).** 폐기 후 EC2 e2e (signup 201 등) 정상.
 
@@ -183,7 +199,7 @@
 | C6 | front 팀 | `pending_recipe_id` fallback 제거 (운영 1~2주 후) |
 | C8 | front + AI | 이미지 업로드 owner (이미지 화면 구현 직전) |
 
-> EC2 전환 + 비용절감 완료. 우리측 잔여는 모두 미시급 정리 작업. 운영 모니터링 단계.
+> EC2 전환 + 비용절감 완료. 우리측 잔여는 모두 미시급 정리 작업. 운영 모니터링 단계. (⛔ 이후 6/8 teardown → 6/17 복구 → 2026-06-24 🏁 최종 종료. 본 절은 6/8 시점 기록.)
 
 ## 변경 이력
 
@@ -207,4 +223,5 @@
 - 2026-06-07 **🖥️ B6 EC2 마이그레이션 (비용절감)**: 팀원 요청 — ALB+Fargate 고정비(~$42/월) 절감 위해 EC2 t4g.small(ARM, AI 서버와 동일) 전환. ① CI arm64 빌드(QEMU + `platforms: linux/arm64`) ② EC2 SG/instance-role/EIP(`13.209.115.84`)/RDS SG ③ t4g.small(`i-00768e6ef42e4e04b`) + user-data(`deploy/ec2-userdata.sh`: Docker+Caddy+ECR+Secrets) ④ **DB schema drift 발견** (recipe_media 드롭 등 — 우리 코드와 불일치, validate 실패) → `prod ddl-auto: none` (부수: Fargate 재시작 위험도 해소) ⑤ DNS 컷오버(`api` A→EIP) — HostingKR ns2/ns4 좀비 `43.201.141.93` 잔존(죽은 IP, 무해) ⑥ Caddy Let's Encrypt production cert 발급 (rate-limit/staging 우회: caddy_data 볼륨 리셋) ⑦ EC2 강제 e2e 8/8 PASS (cert=Let's Encrypt) ⑧ CI→EC2 SSM 자동배포 단계 추가 (`ssm:SendCommand` tag-scope). **EC2 전환 기능 완료. ALB/Fargate 폐기(E9)는 C9(admin vercel.json)+C10(front dart-define) 도메인 전환 후 → 비용절감 완성.** 자세히: §B-EC2.
 - 2026-06-08 **🗑️ E9 ALB+Fargate 폐기 → 비용절감 실현**: C9(admin vercel.json)+C10(front dart-define) 둘 다 `api.naengo.com`/`ai.naengo.com` 도메인 사용 확인(ALB DNS 직접참조 0) → 폐기 진행. ECS service 삭제(desired=0→delete) + ALB/listener80·443/TG 삭제 + ACM(b501f6d7) 삭제 + ALB EIP 자동회수(고아 0) + SG 정리(RDS inbound 의 ECS SG 규칙만 제거(EC2 SG 유지) → ECS SG 삭제 → ALB SG 삭제). ALB 알람 2종 삭제 + EC2 알람 2종 신설(`naengo-ec2-cpu-high`/`naengo-ec2-status-check-failed`). 폐기 후 EC2 검증: `/` 200 + signup 201. **월 ~$42 → ~$17 절감.** 보너스 발견: front 가 탈퇴 화면(`withdrawAccount`→우리 `DELETE /users/me`) 추가. 후속: HostingKR 좀비/고아 CNAME 정리(E10), AI `ai.naengo.com` 실부착 확인(C11).
 - 2026-06-08 **🏁 프로젝트 종료 — 전 자원 teardown**: api-server 측 AWS 자원 일괄 제거 (EC2 terminate + EIP release + ECR + Secrets 3종 + 알람 4 + Log 2 + SNS 2 + ECS taskdef/cluster + EC2 SG + RDS inbound 규칙 + IAM role 3종/profile). 우리측 월 ~$19 → $0. 팀원 자원(naengo-ai/RDS/AI secrets) 미변경. 의도적 잔존: ALB SG(AI SG 참조로 보류, $0) + OIDC provider(공유, 타팀 CI 보호). 외부 잔여(사용자): HostingKR `api`/`_fa840` DNS, GitHub repo Secrets, 카카오 앱. 상세는 상단 🏁 배너.
-- 2026-06-17 **♻️ 복구 — 운영 재가동**: Play Store 출시 지연으로 6/8 teardown 한 백엔드 재배포. IAM(ec2-role+profile, github-actions-ecr-push 동일 ARN) + ECR + GitHub secrets + Secrets Manager 3종(값 동일, JWT_SECRET AI 공유분 유지) + RDS inbound + 새 EIP `13.209.131.248` + EC2 `i-0ce04e443daed6a5e`(t4g.small, ALB SG `sg-0f143ba6a8d9997d2` 재활용, user-data 부트스트랩) + CloudWatch 알람 4종 + SNS 2종(이메일 재확인 대기). 사용자가 HostingKR `api` A → 새 EIP 재추가. Caddy Let's Encrypt cert 발급, **e2e 33/33 PASS**. RDS 데이터 무손실. 상단 ♻️ 배너가 현행.
+- 2026-06-17 **♻️ 복구 — 운영 재가동**: Play Store 출시 지연으로 6/8 teardown 한 백엔드 재배포. IAM(ec2-role+profile, github-actions-ecr-push 동일 ARN) + ECR + GitHub secrets + Secrets Manager 3종(값 동일, JWT_SECRET AI 공유분 유지) + RDS inbound + 새 EIP `13.209.131.248` + EC2 `i-0ce04e443daed6a5e`(t4g.small, ALB SG `sg-0f143ba6a8d9997d2` 재활용, user-data 부트스트랩) + CloudWatch 알람 4종 + SNS 2종(이메일 재확인 대기). 사용자가 HostingKR `api` A → 새 EIP 재추가. Caddy Let's Encrypt cert 발급, **e2e 33/33 PASS**. RDS 데이터 무손실. (⛔ 2026-06-24 🏁 재teardown 으로 종료됨.)
+- 2026-06-24 **🏁 재-teardown — 프로젝트 종결**: 종결 신호 → 6/17 복구분 일괄 해제. teardown 착수 시 EC2(`i-0ce04e443daed6a5e`)·EIP(`13.209.131.248`)는 이미 제거돼 있었음(no-op 확인). 삭제: ECR(img 6, force) + Secrets 3종(force, 복구불가) + 알람 4(ec2-cpu/ec2-status/rds-cpu ap-ne-2 + billing us-east-1) + SNS 2(ops ap-ne-2 + billing us-east-1) + Log `/ec2/naengo-api-server` + IAM role 2종(ec2-role+profile/정책, github-actions-ecr-push/정책) + RDS SG inbound 우리 규칙(`sgr-0f7bebc1483d80367`, 5432 from `sg-0f143ba6a8d9997d2`)만 제거. 유지: RDS `naengo-db-001`(팀원) + SG `sg-0f143…`(AI 참조) + OIDC(공유) + `ecsTaskExecutionRole` + AI 자원. 전수 검증 전멸 + 고아 자원 0(EBS/ENI/AMI/스냅샷). 우리측 월 → **$0**. 외부 잔여(사용자): GitHub repo Secrets 3종 ✅ 6/24 삭제(gh) + HostingKR `api` A ✅ 6/24 제거 + `_fa840…` 고아 ACM CNAME ✅ 기제거. 정리 잔여 없음(카카오 앱은 휴면). 상세는 상단 🏁 배너.
